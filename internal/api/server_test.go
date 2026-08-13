@@ -43,6 +43,14 @@ func TestAPIRequiresKeyAndCreatesDesiredTunnel(t *testing.T) {
 		t.Fatalf("expected 401 without a key, got %d", response.Code)
 	}
 
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/tunnels", nil)
+	request.Header.Set("Authorization", "Bearer "+secret)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"items":[]`) {
+		t.Fatalf("expected an empty array of tunnels, got %d: %s", response.Code, response.Body.String())
+	}
+
 	body := `{"name":"eu-gre-1","type":"gre","local_endpoint":"198.51.100.10","remote_endpoint":"203.0.113.20","address":"10.10.0.1/30","mtu":1476,"ttl":255}`
 	request = httptest.NewRequest(http.MethodPost, "/api/v1/tunnels", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+secret)

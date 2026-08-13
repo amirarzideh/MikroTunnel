@@ -121,7 +121,7 @@ func (s *SQLiteStore) ListTunnels(ctx context.Context) ([]domain.Tunnel, error) 
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.Tunnel
+	out := make([]domain.Tunnel, 0)
 	for rows.Next() {
 		t, err := scanTunnel(rows)
 		if err != nil {
@@ -164,7 +164,7 @@ func (s *SQLiteStore) ListOperations(ctx context.Context, limit int) ([]domain.O
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.Operation
+	out := make([]domain.Operation, 0)
 	for rows.Next() {
 		var o domain.Operation
 		var created string

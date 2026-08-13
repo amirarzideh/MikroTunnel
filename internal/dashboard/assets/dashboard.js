@@ -15,6 +15,8 @@
     if (!state.key) { connectDialog.showModal(); return; }
     try {
       const [system, tunnels, operations] = await Promise.all([api('/system'), api('/tunnels'), api('/operations')]);
+      tunnels.items = Array.isArray(tunnels.items) ? tunnels.items : [];
+      operations.items = Array.isArray(operations.items) ? operations.items : [];
       connection.textContent = 'Connected'; connection.className = 'connection connected';
       $('agent-name').textContent = system.hostname || 'Ubuntu agent'; $('agent-kernel').textContent = system.kernel || 'Linux';
       $('tunnel-count').textContent = tunnels.items.length;
