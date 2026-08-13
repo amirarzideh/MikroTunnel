@@ -275,6 +275,8 @@ func (s *Server) updateTunnel(w http.ResponseWriter, r *http.Request, id string)
 	current.Masquerade = input.Masquerade
 	current.ActualState = domain.ActualPending
 	current.LastError = ""
+	current.FailureCount = 0
+	current.RetryAt = nil
 	current.UpdatedAt = time.Now().UTC()
 	if err := s.store.UpdateTunnel(r.Context(), current); err != nil {
 		writeError(w, 409, "tunnel name already exists")
@@ -300,6 +302,8 @@ func (s *Server) deleteTunnel(w http.ResponseWriter, r *http.Request, id string)
 	t.DesiredState = domain.DesiredDeleted
 	t.ActualState = domain.ActualPending
 	t.LastError = ""
+	t.FailureCount = 0
+	t.RetryAt = nil
 	t.UpdatedAt = time.Now().UTC()
 	if err := s.store.UpdateTunnel(r.Context(), t); err != nil {
 		writeError(w, 500, "could not queue tunnel removal")
@@ -329,6 +333,8 @@ func (s *Server) setTunnelState(w http.ResponseWriter, r *http.Request, id strin
 	t.DesiredState = state
 	t.ActualState = domain.ActualPending
 	t.LastError = ""
+	t.FailureCount = 0
+	t.RetryAt = nil
 	t.UpdatedAt = time.Now().UTC()
 	if err := s.store.UpdateTunnel(r.Context(), t); err != nil {
 		writeError(w, 500, "could not update tunnel")

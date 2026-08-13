@@ -198,7 +198,13 @@ func (s *SQLiteStore) CompleteOperations(ctx context.Context, resourceID string,
 }
 
 func (s *SQLiteStore) RequeueInterruptedOperations(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE operations SET status=? WHERE status=?`, domain.OperationQueued, domain.OperationRunning)
+	if _, err := s.db.ExecContext(ctx, `UPDATE operations SET status=? WHERE status=?`, domain.OperationQueued, domain.OperationRunning); err != nil {
+		return err
+	}
+	// A restart commonly follows a repaired dependency or an agent upgrade.
+	// Do not preserve an old exponential backoff across that restart: reconcile
+	// the desired state immediately and repair stale firewall rules at once.
+	_, err := s.db.ExecContext(ctx, `UPDATE tunnels SET retry_at=NULL WHERE retry_at IS NOT NULL`)
 	return err
 }
 func nullableTime(v *time.Time) any {

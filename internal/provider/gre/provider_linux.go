@@ -143,6 +143,9 @@ func ensureMasquerade(tunnel domain.Tunnel, wanted bool) error {
 		_ = exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE").Run()
 		return nil
 	}
+	// Versions before ingress marking accidentally masqueraded packets *into*
+	// the GRE interface. Remove that legacy rule during upgrades too.
+	_ = exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE").Run()
 	if exec.Command("iptables", markRule...).Run() != nil { add := append([]string{}, markRule...); add[2] = "-A"; if output, err := exec.Command("iptables", add...).CombinedOutput(); err != nil { return fmt.Errorf("mark tunnel ingress: %w: %s", err, output) } }
 	if exec.Command("iptables", natRule...).Run() != nil { add := append([]string{}, natRule...); add[2] = "-A"; if output, err := exec.Command("iptables", add...).CombinedOutput(); err != nil { return fmt.Errorf("add tunnel masquerade: %w: %s", err, output) } }
 	return nil
@@ -157,6 +160,19 @@ func defaultRouteInterface() (string, error) {
 		if route.LinkIndex == 0 || (route.Dst != nil && route.Dst.String() != "0.0.0.0/0") { continue }
 		link, err := netlink.LinkByIndex(route.LinkIndex)
 		if err == nil { return link.Attrs().Name, nil }
+	}
+
+	// Some Ubuntu kernel/netlink combinations report the default route in a
+	// form that RouteList does not expose as a nil or 0.0.0.0/0 destination.
+	// iproute2 asks the same kernel and gives us a stable, unambiguous fallback.
+	output, err := exec.Command("ip", "-o", "-4", "route", "show", "to", "default").Output()
+	if err == nil {
+		fields := strings.Fields(string(output))
+		for i := 0; i+1 < len(fields); i++ {
+			if fields[i] == "dev" && fields[i+1] != "" {
+				return fields[i+1], nil
+			}
+		}
 	}
 	return "", fmt.Errorf("no IPv4 default route interface found")
 }
