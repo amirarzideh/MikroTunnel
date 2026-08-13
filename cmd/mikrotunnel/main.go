@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/amirarzideh/MikroTunnel/internal/controller"
 	"github.com/amirarzideh/MikroTunnel/internal/domain"
 	"github.com/amirarzideh/MikroTunnel/internal/provider/gre"
-	"github.com/amirarzideh/MikroTunnel/internal/security"
 	"github.com/amirarzideh/MikroTunnel/internal/store"
 	"github.com/amirarzideh/MikroTunnel/internal/system"
 )
@@ -146,25 +146,18 @@ func serve(args []string) {
 	defer db.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	has, err := db.HasAPIKeys(ctx)
+	apiKeyBytes, err := os.ReadFile(cfg.Security.APIKeyFile)
 	if err != nil {
-		logger.Error("check API keys", "error", err)
+		logger.Error("read persistent API key", "error", err)
 		os.Exit(1)
 	}
-	if !has {
-		key, err := security.Create(ctx, db)
-		if err != nil {
-			logger.Error("create bootstrap API key", "error", err)
-			os.Exit(1)
-		}
-		if err := os.WriteFile(cfg.Security.BootstrapKeyFile, []byte(key+"\n"), 0o600); err != nil {
-			logger.Error("write bootstrap API key", "error", err)
-			os.Exit(1)
-		}
-		logger.Warn("bootstrap API key written once; copy it and remove the file", "path", cfg.Security.BootstrapKeyFile)
+	apiKey := strings.TrimSpace(string(apiKeyBytes))
+	if len(apiKey) < 16 {
+		logger.Error("persistent API key is invalid")
+		os.Exit(1)
 	}
 	started := time.Now()
-	server := api.New(db, system.NewInspector(started), logger)
+	server := api.New(db, system.NewInspector(started), logger, apiKey, cfg.Security.DashboardUser, cfg.Security.DashboardPassword)
 	reconciler := controller.New(db, []domain.TunnelProvider{gre.Provider{}}, logger)
 	go reconciler.Run(ctx, cfg.Network.ReconcileInterval)
 	httpServer := &http.Server{Addr: cfg.Server.ListenAddress, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}

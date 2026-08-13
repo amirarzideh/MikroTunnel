@@ -18,6 +18,9 @@ type Config struct {
 	} `yaml:"storage"`
 	Security struct {
 		BootstrapKeyFile string `yaml:"bootstrap_key_file"`
+		APIKeyFile       string `yaml:"api_key_file"`
+		DashboardUser    string `yaml:"dashboard_username"`
+		DashboardPassword string `yaml:"dashboard_password"`
 	} `yaml:"security"`
 	Network struct {
 		ReconcileInterval time.Duration `yaml:"-"`
@@ -34,8 +37,8 @@ func Load(path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, err
 	}
-	if cfg.Server.ListenAddress == "" || cfg.Storage.DatabasePath == "" || cfg.Security.BootstrapKeyFile == "" {
-		return Config{}, errors.New("server.listen_address, storage.database_path and security.bootstrap_key_file are required")
+	if cfg.Server.ListenAddress == "" || cfg.Storage.DatabasePath == "" || cfg.Security.APIKeyFile == "" || cfg.Security.DashboardUser == "" || cfg.Security.DashboardPassword == "" {
+		return Config{}, errors.New("server.listen_address, storage.database_path, security.api_key_file, security.dashboard_username and security.dashboard_password are required")
 	}
 	if cfg.Network.IntervalRaw == "" {
 		cfg.Network.IntervalRaw = "20s"
@@ -44,7 +47,7 @@ func Load(path string) (Config, error) {
 	if err != nil || cfg.Network.ReconcileInterval < 5*time.Second {
 		return Config{}, errors.New("network.reconcile_interval must be at least 5s")
 	}
-	for _, target := range []string{cfg.Storage.DatabasePath, cfg.Security.BootstrapKeyFile} {
+	for _, target := range []string{cfg.Storage.DatabasePath, cfg.Security.APIKeyFile} {
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return Config{}, err
 		}

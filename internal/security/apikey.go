@@ -51,3 +51,31 @@ func Authenticate(ctx context.Context, db domain.TunnelStore, authorization stri
 	}
 	return nil
 }
+
+func AuthenticateStatic(expected, authorization string) error {
+	const bearer = "Bearer "
+	if !strings.HasPrefix(authorization, bearer) {
+		return errors.New("missing bearer API key")
+	}
+	actual := strings.TrimSpace(strings.TrimPrefix(authorization, bearer))
+	if expected == "" || subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) != 1 {
+		return errors.New("invalid API key")
+	}
+	return nil
+}
+
+func AuthenticateDashboard(username, password, authorization string) error {
+	const basic = "Basic "
+	if !strings.HasPrefix(authorization, basic) {
+		return errors.New("missing dashboard credentials")
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(strings.TrimPrefix(authorization, basic)))
+	if err != nil {
+		return errors.New("invalid dashboard credentials")
+	}
+	providedUser, providedPassword, ok := strings.Cut(string(raw), ":")
+	if !ok || subtle.ConstantTimeCompare([]byte(providedUser), []byte(username)) != 1 || subtle.ConstantTimeCompare([]byte(providedPassword), []byte(password)) != 1 {
+		return errors.New("invalid dashboard credentials")
+	}
+	return nil
+}

@@ -21,17 +21,20 @@ type Server struct {
 	inspector system.Inspector
 	logger    *slog.Logger
 	providers map[domain.TunnelType]domain.TunnelProvider
+	apiKey    string
+	username  string
+	password  string
 }
 
-func New(db domain.TunnelStore, inspector system.Inspector, logger *slog.Logger) *Server {
+func New(db domain.TunnelStore, inspector system.Inspector, logger *slog.Logger, apiKey, username, password string) *Server {
 	p := gre.Provider{}
-	return &Server{store: db, inspector: inspector, logger: logger, providers: map[domain.TunnelType]domain.TunnelProvider{p.Type(): p}}
+	return &Server{store: db, inspector: inspector, logger: logger, providers: map[domain.TunnelType]domain.TunnelProvider{p.Type(): p}, apiKey: apiKey, username: username, password: password}
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
-	mux.Handle("/api/v1/", s.requireKey(http.HandlerFunc(s.api)))
-	mux.Handle("/", dashboard.Handler())
+	mux.Handle("/api/v1/", s.requireAPI(http.HandlerFunc(s.api)))
+	mux.Handle("/", s.requireDashboard(dashboard.Handler()))
 	return s.log(mux)
 }
 
@@ -63,10 +66,21 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "route not found")
 	}
 }
-func (s *Server) requireKey(next http.Handler) http.Handler {
+func (s *Server) requireAPI(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := security.Authenticate(r.Context(), s.store, r.Header.Get("Authorization")); err != nil {
+		authorization := r.Header.Get("Authorization")
+		if err := security.AuthenticateStatic(s.apiKey, authorization); err != nil && security.AuthenticateDashboard(s.username, s.password, authorization) != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+func (s *Server) requireDashboard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := security.AuthenticateDashboard(s.username, s.password, r.Header.Get("Authorization")); err != nil {
+			w.Header().Set("WWW-Authenticate", `Basic realm="MikroTunnel dashboard", charset="UTF-8"`)
+			writeError(w, http.StatusUnauthorized, "dashboard login required")
 			return
 		}
 		next.ServeHTTP(w, r)

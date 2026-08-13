@@ -52,12 +52,22 @@ server:
 storage:
   database_path: /var/lib/mikrotunnel/mikrotunnel.db
 security:
-  bootstrap_key_file: /var/lib/mikrotunnel/bootstrap-api-key.txt
+  api_key_file: /etc/mikrotunnel/api-key.txt
+  dashboard_username: admin
+  dashboard_password: admin123
 network:
   reconcile_interval: 20s
 EOF
   chmod 0640 "${CONFIG_DIR}/config.yaml"
 fi
+if ! grep -q '^  api_key_file:' "${CONFIG_DIR}/config.yaml"; then
+  sed -i 's|^  bootstrap_key_file:.*|  api_key_file: /etc/mikrotunnel/api-key.txt\n  dashboard_username: admin\n  dashboard_password: admin123|' "${CONFIG_DIR}/config.yaml"
+fi
+if [[ ! -s "${CONFIG_DIR}/api-key.txt" ]]; then
+  umask 077
+  printf 'mt_%s\n' "$(od -An -N 32 -tx1 /dev/urandom | tr -d ' \n')" > "${CONFIG_DIR}/api-key.txt"
+fi
+chmod 0600 "${CONFIG_DIR}/api-key.txt"
 
 install -m 0644 "${tmp_dir}/mikrotunnel.service" /etc/systemd/system/mikrotunnel.service
 systemctl daemon-reload
@@ -72,9 +82,7 @@ if [[ "${MIKROTUNNEL_SKIP_HTTPS:-0}" != "1" ]]; then
 else
   echo "Secure remote access was explicitly skipped."
 fi
-if [[ -f "${DATA_DIR}/bootstrap-api-key.txt" ]]; then
-  echo "API endpoint: http://127.0.0.1:8787/api/v1"
-  echo "Bootstrap API key (shown once):"
-  cat "${DATA_DIR}/bootstrap-api-key.txt"
-  echo "Copy this key now, then securely remove ${DATA_DIR}/bootstrap-api-key.txt."
-fi
+echo "Dashboard login: admin / admin123"
+echo "Persistent API endpoint: https://<your-server>/api/v1"
+echo "Persistent API key: $(cat "${CONFIG_DIR}/api-key.txt")"
+echo "Change the default dashboard password in ${CONFIG_DIR}/config.yaml, then run: sudo mikrotun service restart"

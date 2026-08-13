@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/amirarzideh/MikroTunnel/internal/domain"
-	"github.com/amirarzideh/MikroTunnel/internal/security"
 	"github.com/amirarzideh/MikroTunnel/internal/store"
 	"github.com/amirarzideh/MikroTunnel/internal/system"
 )
@@ -24,14 +23,19 @@ func TestAPIRequiresKeyAndCreatesDesiredTunnel(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	secret, err := security.Create(ctx, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	handler := New(db, system.Inspector{}, slog.New(slog.NewTextHandler(testWriter{t}, nil))).Handler()
+	const secret = "mt_static_test_key_0123456789"
+	const username = "admin"
+	const password = "admin123"
+	handler := New(db, system.Inspector{}, slog.New(slog.NewTextHandler(testWriter{t}, nil)), secret, username, password).Handler()
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected dashboard login challenge, got %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	request.SetBasicAuth(username, password)
+	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "MikroTunnel") {
 		t.Fatalf("expected the dashboard shell, got %d", response.Code)
@@ -49,6 +53,13 @@ func TestAPIRequiresKeyAndCreatesDesiredTunnel(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"items":[]`) {
 		t.Fatalf("expected an empty array of tunnels, got %d: %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/tunnels", nil)
+	request.SetBasicAuth(username, password)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected dashboard credentials to access API, got %d", response.Code)
 	}
 
 	body := `{"name":"eu-gre-1","type":"gre","local_endpoint":"198.51.100.10","remote_endpoint":"203.0.113.20","address":"10.10.0.1/30","mtu":1476,"ttl":255}`
