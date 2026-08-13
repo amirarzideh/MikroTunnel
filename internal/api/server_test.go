@@ -30,8 +30,14 @@ func TestAPIRequiresKeyAndCreatesDesiredTunnel(t *testing.T) {
 	}
 
 	handler := New(db, system.Inspector{}, slog.New(slog.NewTextHandler(testWriter{t}, nil))).Handler()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/tunnels", nil)
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "MikroTunnel") {
+		t.Fatalf("expected the dashboard shell, got %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/tunnels", nil)
+	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without a key, got %d", response.Code)

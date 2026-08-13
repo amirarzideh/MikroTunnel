@@ -14,6 +14,7 @@ The initial foundation provides:
 - tunnel desired-state CRUD and operation audit records
 - health and system discovery endpoints
 - Linux GRE provider with explicit ownership checks, plus provider/controller interfaces for future tunnel types
+- embedded local dashboard for monitoring and GRE tunnel creation
 - systemd and GitHub Release installer templates
 
 On Ubuntu, the GRE provider creates, configures, enables and deletes only interfaces marked as owned by the matching MikroTunnel tunnel ID. A conflicting or manually created interface is never adopted automatically. Deletes are durable operations: the API queues deletion, then the controller removes the owned interface and marks the operation successful only after that succeeds. A tunnel record is not presented as applied until reconciliation reports it.
@@ -48,6 +49,10 @@ GET    /api/v1/operations
 ```
 
 Every `/api/v1` request requires `Authorization: Bearer mt_...`.
+
+## Dashboard security
+
+The dashboard is served by the agent at `/`. It asks for an API key at connection time and retains it only in the current browser tab. It is not a replacement for transport security: keep the default loopback listener for local use, or put a TLS-enabled reverse proxy and access control in front of a remotely exposed agent.
 
 ## Installer and releases
 

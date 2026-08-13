@@ -25,10 +25,10 @@ This repository is deliberately built as a standalone, self-hosted control plane
 - Idempotency keys, request correlation IDs and pagination.
 - API-key rotation/revocation, TLS/reverse-proxy guidance and backup/restore.
 
-## Milestone 4 — standalone dashboard
+## Milestone 4 — standalone dashboard (first slice implemented)
 
-- A compact modern local dashboard served by the agent.
-- Live tunnel status, topology and operation history.
+- A compact modern local dashboard served by the agent (implemented).
+- Live tunnel status, topology, operation history and GRE creation (implemented).
 - Visual depth used only for hierarchy and state, never decoration that obscures controls.
 
 ## Milestone 5 — MikroPanel connector

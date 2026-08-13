@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/amirarzideh/MikroTunnel/internal/dashboard"
 	"github.com/amirarzideh/MikroTunnel/internal/domain"
 	"github.com/amirarzideh/MikroTunnel/internal/provider/gre"
 	"github.com/amirarzideh/MikroTunnel/internal/security"
@@ -30,6 +31,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.Handle("/api/v1/", s.requireKey(http.HandlerFunc(s.api)))
+	mux.Handle("/", dashboard.Handler())
 	return s.log(mux)
 }
 
