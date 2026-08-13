@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
 	"syscall"
 
 	"github.com/vishvananda/netlink"
@@ -120,10 +121,39 @@ func create(tunnel domain.Tunnel) (netlink.Link, error) {
 	// LinkAdd does not persist LinkAttrs.Alias for GRE links on all supported
 	// netlink/kernel combinations. Set it explicitly before any further
 	// configuration so subsequent reconciliations can prove ownership.
-	if err := netlink.LinkSetAlias(created, ownershipMarker(tunnel)); err != nil {
-		return nil, fmt.Errorf("mark GRE interface as managed: %w", err)
+	if err := markOwnership(created, ownershipMarker(tunnel)); err != nil {
+		return nil, err
 	}
 	return created, nil
+}
+
+func markOwnership(link netlink.Link, marker string) error {
+	if err := netlink.LinkSetAlias(link, marker); err != nil {
+		return fmt.Errorf("mark GRE interface as managed: %w", err)
+	}
+	stored, err := netlink.LinkByName(link.Attrs().Name)
+	if err != nil {
+		return fmt.Errorf("verify GRE ownership marker: %w", err)
+	}
+	if stored.Attrs().Alias == marker {
+		return nil
+	}
+
+	// Some kernel/netlink combinations acknowledge LinkSetAlias without
+	// persisting it for a GRE link. iproute2 uses the same kernel API but is
+	// reliable there; use it only as a verified fallback, never through a shell.
+	output, err := exec.Command("ip", "link", "set", "dev", link.Attrs().Name, "alias", marker).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("mark GRE interface as managed with iproute2: %w: %s", err, string(output))
+	}
+	stored, err = netlink.LinkByName(link.Attrs().Name)
+	if err != nil {
+		return fmt.Errorf("verify fallback GRE ownership marker: %w", err)
+	}
+	if stored.Attrs().Alias != marker {
+		return fmt.Errorf("GRE ownership marker was not persisted")
+	}
+	return nil
 }
 
 func ensureAddress(link netlink.Link, cidr string) error {

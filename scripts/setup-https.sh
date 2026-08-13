@@ -16,7 +16,7 @@ read_value() {
   local prompt="$1" default="${2:-}" value
   # A non-interactive installer (cloud-init, CI, or a piped command) must
   # still produce a secure working default instead of failing on /dev/tty.
-  if [[ ! -r /dev/tty ]]; then
+  if [[ ! -t 1 ]]; then
     printf '%s' "${default}"
     return
   fi
