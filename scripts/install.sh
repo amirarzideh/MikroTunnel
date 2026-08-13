@@ -66,11 +66,11 @@ sleep 1
 systemctl --quiet is-active mikrotunnel.service
 
 echo "MikroTunnel is running on 127.0.0.1:8787."
-if [[ "${MIKROTUNNEL_SKIP_HTTPS:-0}" != "1" && ! -f /etc/caddy/Caddyfile.d/mikrotunnel.caddy ]]; then
+if [[ "${MIKROTUNNEL_SKIP_HTTPS:-0}" != "1" ]]; then
   echo "Secure HTTPS setup is required before remote access is enabled."
   /usr/local/lib/mikrotunnel/setup-https.sh
 else
-  echo "Secure remote access is already configured, or was explicitly skipped."
+  echo "Secure remote access was explicitly skipped."
 fi
 if [[ -f "${DATA_DIR}/bootstrap-api-key.txt" ]]; then
   echo "API endpoint: http://127.0.0.1:8787/api/v1"
