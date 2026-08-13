@@ -37,6 +37,7 @@ type Tunnel struct {
 	Local        string       `json:"local_endpoint"`
 	Remote       string       `json:"remote_endpoint"`
 	Address      string       `json:"address"`
+	PeerAddress  string       `json:"peer_address"`
 	MTU          int          `json:"mtu"`
 	TTL          int          `json:"ttl"`
 	Description  string       `json:"description,omitempty"`
@@ -56,6 +57,7 @@ type TunnelInput struct {
 	Local       string     `json:"local_endpoint"`
 	Remote      string     `json:"remote_endpoint"`
 	Address     string     `json:"address"`
+	PeerAddress string     `json:"peer_address"`
 	MTU         int        `json:"mtu"`
 	TTL         int        `json:"ttl"`
 	Description string     `json:"description"`

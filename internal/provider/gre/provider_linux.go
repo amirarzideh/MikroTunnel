@@ -26,7 +26,7 @@ func Discover() ([]domain.DiscoveredTunnel, error) {
 		if !ok || g.Local == nil || g.Remote == nil || g.Local.IsUnspecified() || g.Remote.IsUnspecified() { continue }
 		item := domain.DiscoveredTunnel{Name: link.Attrs().Name, Local: g.Local.String(), Remote: g.Remote.String(), MTU: link.Attrs().MTU, TTL: int(g.Ttl), Alias: link.Attrs().Alias}
 		addresses, addrErr := netlink.AddrList(link, netlink.FAMILY_V4)
-		if addrErr == nil && len(addresses) > 0 { item.Address = addresses[0].String() }
+		if addrErr == nil && len(addresses) > 0 { item.Address = addresses[0].IPNet.String() }
 		out = append(out, item)
 	}
 	return out, nil

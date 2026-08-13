@@ -114,6 +114,7 @@ func (s *Server) probeTunnel(w http.ResponseWriter, r *http.Request, id string) 
 	if err != nil { writeError(w, 500, "could not load tunnel"); return }
 	if t.DesiredState != domain.DesiredEnabled { writeError(w, 409, "enable the tunnel before probing"); return }
 	target := r.URL.Query().Get("target")
+	if target == "" { target = t.PeerAddress }
 	if target == "" { target = "1.1.1.1" }
 	if net.ParseIP(target) == nil { writeError(w, 400, "probe target must be an IP address"); return }
 	output, err := exec.CommandContext(r.Context(), "ping", "-I", t.Name, "-c", "3", "-W", "2", target).CombinedOutput()
@@ -201,8 +202,9 @@ func (s *Server) createTunnel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "an interface with this name already exists; remove it or choose another name")
 		return
 	}
+	if input.PeerAddress != "" && net.ParseIP(input.PeerAddress) == nil { writeError(w, 400, "peer interface address must be an IP address"); return }
 	now := time.Now().UTC()
-	t := domain.Tunnel{ID: store.NewID(), Name: input.Name, Type: input.Type, Local: input.Local, Remote: input.Remote, Address: input.Address, MTU: input.MTU, TTL: input.TTL, Description: input.Description, Masquerade: input.Masquerade, DesiredState: domain.DesiredEnabled, ActualState: domain.ActualPending, CreatedAt: now, UpdatedAt: now}
+	t := domain.Tunnel{ID: store.NewID(), Name: input.Name, Type: input.Type, Local: input.Local, Remote: input.Remote, Address: input.Address, PeerAddress: input.PeerAddress, MTU: input.MTU, TTL: input.TTL, Description: input.Description, Masquerade: input.Masquerade, DesiredState: domain.DesiredEnabled, ActualState: domain.ActualPending, CreatedAt: now, UpdatedAt: now}
 	if err := s.store.CreateTunnel(r.Context(), t); err != nil {
 		writeError(w, 409, "tunnel name already exists")
 		return
@@ -248,6 +250,7 @@ func (s *Server) updateTunnel(w http.ResponseWriter, r *http.Request, id string)
 	current.Local = input.Local
 	current.Remote = input.Remote
 	current.Address = input.Address
+	current.PeerAddress = input.PeerAddress
 	current.MTU = input.MTU
 	current.TTL = input.TTL
 	current.Description = input.Description
