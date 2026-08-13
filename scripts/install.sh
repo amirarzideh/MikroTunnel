@@ -76,7 +76,8 @@ umask 022
 
 install -m 0644 "${tmp_dir}/mikrotunnel.service" /etc/systemd/system/mikrotunnel.service
 systemctl daemon-reload
-systemctl enable --now mikrotunnel.service
+systemctl enable mikrotunnel.service
+systemctl restart mikrotunnel.service
 sleep 1
 systemctl --quiet is-active mikrotunnel.service
 
