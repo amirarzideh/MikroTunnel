@@ -119,17 +119,38 @@ func removePlatform(_ context.Context, tunnel domain.Tunnel) error {
 
 func ensureMasquerade(tunnel domain.Tunnel, wanted bool) error {
 	comment := ownershipMarker(tunnel)
-	args := []string{"-t", "nat", "-C", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
-	if err := exec.Command("iptables", args...).Run(); err == nil {
+	// NAT belongs on the public egress interface, not the GRE interface. A
+	// packet entering GRE exits through the default route (ens160 here), so
+	// match this tunnel's IPv4 subnet and masquerade only on that egress.
+	_, subnet, err := net.ParseCIDR(tunnel.Address)
+	if err != nil { return fmt.Errorf("parse tunnel subnet for masquerade: %w", err) }
+	egress, err := defaultRouteInterface()
+	if err != nil { return err }
+	args := []string{"-t", "nat", "-C", "POSTROUTING", "-s", subnet.String(), "-o", egress, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
+	if exec.Command("iptables", args...).Run() == nil {
 		if wanted { return nil }
 		args[2] = "-D"
 		if output, deleteErr := exec.Command("iptables", args...).CombinedOutput(); deleteErr != nil { return fmt.Errorf("remove tunnel masquerade: %w: %s", deleteErr, output) }
 		return nil
 	}
+	// Remove the legacy broken rule that used the GRE device as egress.
+	legacy := []string{"-t", "nat", "-D", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
+	_ = exec.Command("iptables", legacy...).Run()
 	if !wanted { return nil }
 	args[2] = "-A"
 	if output, err := exec.Command("iptables", args...).CombinedOutput(); err != nil { return fmt.Errorf("add tunnel masquerade: %w: %s", err, output) }
 	return nil
+}
+
+func defaultRouteInterface() (string, error) {
+	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
+	if err != nil { return "", fmt.Errorf("list IPv4 routes: %w", err) }
+	for _, route := range routes {
+		if route.Dst != nil || route.LinkIndex == 0 { continue }
+		link, err := netlink.LinkByIndex(route.LinkIndex)
+		if err == nil { return link.Attrs().Name, nil }
+	}
+	return "", fmt.Errorf("no IPv4 default route interface found")
 }
 
 func create(tunnel domain.Tunnel) (netlink.Link, error) {
