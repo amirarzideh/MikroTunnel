@@ -3,7 +3,6 @@ set -euo pipefail
 
 # GitHub repository is intentionally configurable until the first public release.
 REPOSITORY="${MIKROTUNNEL_REPOSITORY:-amirarzideh/MikroTunnel}"
-VERSION="${MIKROTUNNEL_VERSION:-latest}"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/mikrotunnel"
 DATA_DIR="/var/lib/mikrotunnel"
@@ -29,11 +28,7 @@ if ! command -v curl >/dev/null; then
   apt-get install -y curl ca-certificates
 fi
 
-if [[ "${VERSION}" == "latest" ]]; then
-  release_url="https://github.com/${REPOSITORY}/releases/latest/download/mikrotunnel-linux-${asset_arch}.tar.gz"
-else
-  release_url="https://github.com/${REPOSITORY}/releases/download/${VERSION}/mikrotunnel-linux-${asset_arch}.tar.gz"
-fi
+release_url="https://github.com/${REPOSITORY}/releases/latest/download/mikrotunnel-linux-${asset_arch}.tar.gz"
 
 curl_headers=()
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then

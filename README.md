@@ -83,7 +83,7 @@ The dashboard is served by the agent at `/`. It asks for an API key at connectio
 
 ## Installer and releases
 
-The installer is designed for GitHub Releases. After a release is published, the deployment command is:
+The installer always downloads the latest published GitHub Release. The deployment command is:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/amirarzideh/MikroTunnel/main/scripts/install.sh | sudo bash
