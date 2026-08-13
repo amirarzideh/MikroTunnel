@@ -16,7 +16,7 @@ The initial foundation provides:
 - Linux GRE provider with explicit ownership checks, plus provider/controller interfaces for future tunnel types
 - systemd and GitHub Release installer templates
 
-On Ubuntu, the GRE provider creates, configures and enables only interfaces marked as owned by the matching MikroTunnel tunnel ID. A conflicting or manually created interface is never adopted automatically. Deleting a live interface remains disabled until the durable operation queue is added; this prevents accidental orphaning during an interrupted delete. A tunnel record is not presented as applied until reconciliation reports it.
+On Ubuntu, the GRE provider creates, configures, enables and deletes only interfaces marked as owned by the matching MikroTunnel tunnel ID. A conflicting or manually created interface is never adopted automatically. Deletes are durable operations: the API queues deletion, then the controller removes the owned interface and marks the operation successful only after that succeeds. A tunnel record is not presented as applied until reconciliation reports it.
 
 ## Core rule
 
@@ -51,10 +51,10 @@ Every `/api/v1` request requires `Authorization: Bearer mt_...`.
 
 ## Installer and releases
 
-The installer is designed for GitHub Releases. Before the first release, set the repository slug in the release workflow and installer default. The deployment command will be:
+The installer is designed for GitHub Releases. After a release is published, the deployment command is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/MikroTunnel/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/amirarzideh/MikroTunnel/main/scripts/install.sh | sudo bash
 ```
 
 ## Repository layout

@@ -147,6 +147,22 @@ func (s *SQLiteStore) ListOperations(ctx context.Context, limit int) ([]domain.O
 	}
 	return out, rows.Err()
 }
+
+func (s *SQLiteStore) MarkOperationsRunning(ctx context.Context, resourceID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE operations SET status=? WHERE resource_id=? AND status=?`, domain.OperationRunning, resourceID, domain.OperationQueued)
+	return err
+}
+
+func (s *SQLiteStore) CompleteOperations(ctx context.Context, resourceID string, status domain.OperationStatus, message string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.ExecContext(ctx, `UPDATE operations SET status=?, message=?, finished_at=? WHERE resource_id=? AND status IN (?, ?)`, status, message, now, resourceID, domain.OperationQueued, domain.OperationRunning)
+	return err
+}
+
+func (s *SQLiteStore) RequeueInterruptedOperations(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE operations SET status=? WHERE status=?`, domain.OperationQueued, domain.OperationRunning)
+	return err
+}
 func nullableTime(v *time.Time) any {
 	if v == nil {
 		return nil

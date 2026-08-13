@@ -14,14 +14,14 @@ This repository is deliberately built as a standalone, self-hosted control plane
 ## Milestone 2 — Ubuntu GRE provider (in progress)
 
 - Add, configure, enable and disable only explicitly MikroTunnel-owned Linux GRE interfaces.
-- Defer live-interface deletion until the durable operation queue can complete or recover it safely.
+- Queue live-interface deletion durably, then remove only the owned interface.
 - Reconcile address, MTU, TTL and link state idempotently.
 - Detect manual changes and surface a precise drift/error state.
 - Test with disposable Ubuntu virtual machines and namespace fixtures before production use.
 
-## Milestone 3 — operational API
+## Milestone 3 — operational API (in progress)
 
-- Durable operation queue: queued, running, success or failed.
+- Durable operation queue: queued, running, success or failed (implemented).
 - Idempotency keys, request correlation IDs and pagination.
 - API-key rotation/revocation, TLS/reverse-proxy guidance and backup/restore.
 

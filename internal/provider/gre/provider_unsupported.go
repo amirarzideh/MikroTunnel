@@ -16,3 +16,7 @@ func observePlatform(context.Context, domain.Tunnel) (domain.ActualState, string
 func reconcilePlatform(context.Context, domain.Tunnel) error {
 	return errors.New("GRE management requires Linux")
 }
+
+func removePlatform(context.Context, domain.Tunnel) error {
+	return errors.New("GRE management requires Linux")
+}

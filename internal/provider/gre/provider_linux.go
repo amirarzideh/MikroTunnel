@@ -66,6 +66,23 @@ func reconcilePlatform(_ context.Context, tunnel domain.Tunnel) error {
 	return nil
 }
 
+func removePlatform(_ context.Context, tunnel domain.Tunnel) error {
+	link, err := netlink.LinkByName(tunnel.Name)
+	if errors.Is(err, netlink.LinkNotFoundError{}) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find GRE interface for deletion: %w", err)
+	}
+	if link.Attrs().Alias != ownershipMarker(tunnel) {
+		return fmt.Errorf("refusing to delete %q because it is not owned by MikroTunnel", tunnel.Name)
+	}
+	if err := netlink.LinkDel(link); err != nil {
+		return fmt.Errorf("delete GRE interface: %w", err)
+	}
+	return nil
+}
+
 func create(tunnel domain.Tunnel) (netlink.Link, error) {
 	link := &netlink.Gretun{LinkAttrs: netlink.LinkAttrs{Name: tunnel.Name, MTU: tunnel.MTU, Alias: ownershipMarker(tunnel)}, Local: net.ParseIP(tunnel.Local), Remote: net.ParseIP(tunnel.Remote), Ttl: uint8(tunnel.TTL)}
 	if err := netlink.LinkAdd(link); err != nil && !errors.Is(err, syscall.EEXIST) {

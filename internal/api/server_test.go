@@ -61,6 +61,28 @@ func TestAPIRequiresKeyAndCreatesDesiredTunnel(t *testing.T) {
 	if len(operations) != 1 || operations[0].Status != domain.OperationQueued {
 		t.Fatalf("expected one queued operation, got %#v", operations)
 	}
+
+	request = httptest.NewRequest(http.MethodDelete, "/api/v1/tunnels/"+tunnel.ID, nil)
+	request.Header.Set("Authorization", "Bearer "+secret)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for queued deletion, got %d: %s", response.Code, response.Body.String())
+	}
+	stored, err := db.GetTunnel(ctx, tunnel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.DesiredState != domain.DesiredDeleted {
+		t.Fatalf("expected a pending delete, got %q", stored.DesiredState)
+	}
+	operations, err = db.ListOperations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(operations) != 2 || operations[0].Status != domain.OperationQueued {
+		t.Fatalf("expected queued delete operation, got %#v", operations)
+	}
 }
 
 type testWriter struct{ t *testing.T }

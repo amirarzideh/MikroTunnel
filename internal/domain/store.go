@@ -10,6 +10,9 @@ type TunnelStore interface {
 	ListTunnels(context.Context) ([]Tunnel, error)
 	CreateOperation(context.Context, Operation) error
 	ListOperations(context.Context, int) ([]Operation, error)
+	MarkOperationsRunning(context.Context, string) error
+	CompleteOperations(context.Context, string, OperationStatus, string) error
+	RequeueInterruptedOperations(context.Context) error
 	HasAPIKeys(context.Context) (bool, error)
 	CreateAPIKey(context.Context, APIKey) error
 	FindAPIKey(context.Context, string) (APIKey, error)

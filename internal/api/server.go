@@ -133,6 +133,10 @@ func (s *Server) updateTunnel(w http.ResponseWriter, r *http.Request, id string)
 		writeError(w, 500, "could not load tunnel")
 		return
 	}
+	if current.DesiredState == domain.DesiredDeleted {
+		writeError(w, http.StatusConflict, "tunnel removal is already queued")
+		return
+	}
 	var input domain.TunnelInput
 	if err := decode(w, r, &input); err != nil {
 		return
@@ -180,16 +184,20 @@ func (s *Server) deleteTunnel(w http.ResponseWriter, r *http.Request, id string)
 		writeError(w, 500, "could not load tunnel")
 		return
 	}
-	if t.ActualState != domain.ActualPending && t.ActualState != domain.ActualMissing {
-		writeError(w, http.StatusConflict, "tunnel removal is unavailable until the durable operation queue is enabled")
+	if t.DesiredState == domain.DesiredDeleted {
+		writeError(w, http.StatusConflict, "tunnel removal is already queued")
 		return
 	}
-	if err := s.store.DeleteTunnel(r.Context(), id); err != nil {
-		writeError(w, 500, "could not delete tunnel")
+	t.DesiredState = domain.DesiredDeleted
+	t.ActualState = domain.ActualPending
+	t.LastError = ""
+	t.UpdatedAt = time.Now().UTC()
+	if err := s.store.UpdateTunnel(r.Context(), t); err != nil {
+		writeError(w, 500, "could not queue tunnel removal")
 		return
 	}
-	s.operation(r, id, "delete_tunnel", domain.OperationSuccess, "pending desired state deleted; no host network object existed")
-	writeJSON(w, 200, map[string]any{"deleted": true, "id": t.ID})
+	s.operation(r, id, "delete_tunnel", domain.OperationQueued, "tunnel removal queued")
+	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true, "id": t.ID})
 }
 func (s *Server) setTunnelState(w http.ResponseWriter, r *http.Request, id string, state domain.DesiredState) {
 	if id == "" || strings.Contains(id, "/") {
@@ -203,6 +211,10 @@ func (s *Server) setTunnelState(w http.ResponseWriter, r *http.Request, id strin
 	}
 	if err != nil {
 		writeError(w, 500, "could not load tunnel")
+		return
+	}
+	if t.DesiredState == domain.DesiredDeleted {
+		writeError(w, http.StatusConflict, "tunnel removal is already queued")
 		return
 	}
 	t.DesiredState = state

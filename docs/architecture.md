@@ -30,6 +30,6 @@ The HTTP layer validates data and writes desired state. It does not run arbitrar
 
 ## State vocabulary
 
-`desired_state` is either `enabled` or `disabled`. `actual_state` is a provider observation: `unknown`, `pending`, `up`, `down`, `error`, or `missing`.
+`desired_state` is `enabled`, `disabled`, or `deleted`. `actual_state` is a provider observation: `unknown`, `pending`, `up`, `down`, `error`, or `missing`.
 
-Every state transition creates an immutable operation record. This allows a future dashboard and MikroPanel to report pending or failed networking work accurately rather than claiming that a request immediately succeeded on Linux.
+Every state transition creates an immutable operation record. The controller advances the record through `queued`, `running`, `success`, or `failed`. On startup, interrupted `running` operations are safely returned to `queued`. This lets a future dashboard and MikroPanel report pending or failed networking work accurately rather than claiming that a request immediately succeeded on Linux.

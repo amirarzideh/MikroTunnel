@@ -44,3 +44,6 @@ func (Provider) Observe(ctx context.Context, tunnel domain.Tunnel) (domain.Actua
 func (Provider) Reconcile(ctx context.Context, tunnel domain.Tunnel) error {
 	return reconcilePlatform(ctx, tunnel)
 }
+func (Provider) Remove(ctx context.Context, tunnel domain.Tunnel) error {
+	return removePlatform(ctx, tunnel)
+}

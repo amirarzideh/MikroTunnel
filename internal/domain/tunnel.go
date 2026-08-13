@@ -16,6 +16,7 @@ type DesiredState string
 const (
 	DesiredEnabled  DesiredState = "enabled"
 	DesiredDisabled DesiredState = "disabled"
+	DesiredDeleted  DesiredState = "deleted"
 )
 
 type ActualState string
@@ -62,4 +63,5 @@ type TunnelProvider interface {
 	Validate(TunnelInput) error
 	Observe(context.Context, Tunnel) (ActualState, string, error)
 	Reconcile(context.Context, Tunnel) error
+	Remove(context.Context, Tunnel) error
 }
