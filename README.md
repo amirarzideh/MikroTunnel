@@ -79,6 +79,14 @@ The installer is designed for GitHub Releases. After a release is published, the
 curl -fsSL https://raw.githubusercontent.com/amirarzideh/MikroTunnel/main/scripts/install.sh | sudo bash
 ```
 
+For a private repository, create a fine-grained GitHub token with read-only **Contents** access to this repository, then use:
+
+```bash
+export GITHUB_TOKEN='github_pat_...'
+curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" https://raw.githubusercontent.com/amirarzideh/MikroTunnel/main/scripts/install.sh | sudo -E bash
+unset GITHUB_TOKEN
+```
+
 ## Repository layout
 
 ```text

@@ -35,9 +35,14 @@ else
   release_url="https://github.com/${REPOSITORY}/releases/download/${VERSION}/mikrotunnel-linux-${asset_arch}.tar.gz"
 fi
 
+curl_headers=()
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  curl_headers=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+fi
+
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
-curl --fail --location --retry 3 --output "${tmp_dir}/release.tar.gz" "${release_url}"
+curl --fail --location --retry 3 "${curl_headers[@]}" --output "${tmp_dir}/release.tar.gz" "${release_url}"
 tar -xzf "${tmp_dir}/release.tar.gz" -C "${tmp_dir}"
 install -m 0755 "${tmp_dir}/mikrotunnel" "${INSTALL_DIR}/mikrotunnel"
 ln -sfn "${INSTALL_DIR}/mikrotunnel" "${INSTALL_DIR}/mikrotun"
