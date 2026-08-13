@@ -64,6 +64,7 @@ func reconcilePlatform(_ context.Context, tunnel domain.Tunnel) error {
 		return err
 	}
 	if tunnel.DesiredState == domain.DesiredDisabled {
+		if err := ensureMasquerade(tunnel, false); err != nil { return err }
 		if err := netlink.LinkSetDown(link); err != nil {
 			return fmt.Errorf("disable GRE interface: %w", err)
 		}
@@ -72,10 +73,12 @@ func reconcilePlatform(_ context.Context, tunnel domain.Tunnel) error {
 	if err := netlink.LinkSetUp(link); err != nil {
 		return fmt.Errorf("enable GRE interface: %w", err)
 	}
+	if err := ensureMasquerade(tunnel, tunnel.Masquerade); err != nil { return err }
 	return nil
 }
 
 func removePlatform(_ context.Context, tunnel domain.Tunnel) error {
+	if err := ensureMasquerade(tunnel, false); err != nil { return err }
 	link, err := netlink.LinkByName(tunnel.Name)
 	if isLinkNotFound(err) {
 		return nil
@@ -89,6 +92,21 @@ func removePlatform(_ context.Context, tunnel domain.Tunnel) error {
 	if err := netlink.LinkDel(link); err != nil {
 		return fmt.Errorf("delete GRE interface: %w", err)
 	}
+	return nil
+}
+
+func ensureMasquerade(tunnel domain.Tunnel, wanted bool) error {
+	comment := ownershipMarker(tunnel)
+	args := []string{"-t", "nat", "-C", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
+	if err := exec.Command("iptables", args...).Run(); err == nil {
+		if wanted { return nil }
+		args[2] = "-D"
+		if output, deleteErr := exec.Command("iptables", args...).CombinedOutput(); deleteErr != nil { return fmt.Errorf("remove tunnel masquerade: %w: %s", deleteErr, output) }
+		return nil
+	}
+	if !wanted { return nil }
+	args[2] = "-A"
+	if output, err := exec.Command("iptables", args...).CombinedOutput(); err != nil { return fmt.Errorf("add tunnel masquerade: %w: %s", err, output) }
 	return nil
 }
 

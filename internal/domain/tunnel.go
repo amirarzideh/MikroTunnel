@@ -40,6 +40,7 @@ type Tunnel struct {
 	MTU          int          `json:"mtu"`
 	TTL          int          `json:"ttl"`
 	Description  string       `json:"description,omitempty"`
+	Masquerade   bool         `json:"masquerade"`
 	DesiredState DesiredState `json:"desired_state"`
 	ActualState  ActualState  `json:"actual_state"`
 	LastError    string       `json:"last_error,omitempty"`
@@ -58,6 +59,7 @@ type TunnelInput struct {
 	MTU         int        `json:"mtu"`
 	TTL         int        `json:"ttl"`
 	Description string     `json:"description"`
+	Masquerade  bool       `json:"masquerade"`
 }
 
 type TunnelProvider interface {

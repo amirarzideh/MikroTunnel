@@ -1,31 +1,37 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const connection = $('connection');
-  const tunnelDialog = $('tunnel-dialog');
   const api = async (path, options = {}) => {
     const response = await fetch('/api/v1' + path, { ...options, credentials: 'same-origin', headers: { ...options.headers } });
-    if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'Request failed'); }
-    return response.json();
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Request failed');
+    return body;
   };
-  const badge = value => `<span class="badge ${value}">${value}</span>`;
-  const safe = value => String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+  const safe = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const badge = value => `<span class="badge ${safe(value)}">${safe(value)}</span>`;
+  let loading = false;
   async function load() {
+    if (loading) return; loading = true;
     try {
-      const [system, tunnels, operations] = await Promise.all([api('/system'), api('/tunnels'), api('/operations')]);
-      tunnels.items = Array.isArray(tunnels.items) ? tunnels.items : [];
-      operations.items = Array.isArray(operations.items) ? operations.items : [];
-      connection.textContent = 'Connected'; connection.className = 'connection connected';
-      $('agent-name').textContent = system.hostname || 'Ubuntu agent'; $('agent-kernel').textContent = system.kernel || 'Linux';
-      $('tunnel-count').textContent = tunnels.items.length;
-      $('healthy-count').textContent = tunnels.items.filter(t => t.actual_state === 'up').length;
-      $('pending-count').textContent = operations.items.filter(o => o.status === 'queued' || o.status === 'running').length;
-      $('tunnels').innerHTML = tunnels.items.length ? tunnels.items.map(t => `<article class="tunnel"><div><div class="tunnel-name">${safe(t.name)}</div><span class="tunnel-detail">${safe(t.local_endpoint)} to ${safe(t.remote_endpoint)} · ${safe(t.address)}${t.last_error ? '<br><span class="repair-note">Repair: ' + safe(t.last_error) + (t.retry_at ? ' · retry scheduled' : '') + '</span>' : ''}</span></div><div class="tunnel-actions">${badge(t.actual_state)} ${badge(t.desired_state)}<button class="action" data-id="${safe(t.id)}" data-action="edit">Edit</button><button class="action" data-id="${safe(t.id)}" data-action="${t.desired_state === 'enabled' ? 'disable' : 'enable'}">${t.desired_state === 'enabled' ? 'Disable' : 'Enable'}</button><button class="action danger" data-id="${safe(t.id)}" data-action="delete">Remove</button></div></article>`).join('') : '<p class="empty">No tunnels have been configured.</p>';
-      $('operations').innerHTML = operations.items.length ? operations.items.slice(0, 8).map(o => `<article class="operation"><div><strong>${safe(o.action.replaceAll('_',' '))}</strong><small>${safe(o.message || 'Processing')}</small></div>${badge(o.status)}</article>`).join('') : '<p class="empty">No operations yet.</p>';
-    } catch (error) { connection.textContent = 'Connection failed'; connection.className = 'connection'; }
+      const [{items=[]}, settings] = await Promise.all([api('/tunnels'), api('/network/settings')]);
+	  $('ipv4-forward').checked = !!settings.ipv4_forward;
+      $('connection').textContent = 'Live'; $('connection').className = 'connection connected';
+      $('tunnels').innerHTML = items.length ? items.map(t => `<article class="tunnel-card"><div class="tunnel-top"><div><strong>${safe(t.name)}</strong><span>${safe(t.local_endpoint)} → ${safe(t.remote_endpoint)} · ${safe(t.address)}</span></div>${badge(t.actual_state)}</div><div class="tunnel-meta">${badge(t.desired_state)} ${t.masquerade ? '<span class="badge enabled">NAT enabled</span>' : ''}${t.last_error ? `<span class="error">${safe(t.last_error)}</span>` : ''}</div><div class="tunnel-actions"><button data-action="probe" data-id="${safe(t.id)}">Ping internet</button><button data-action="edit" data-id="${safe(t.id)}">Edit</button><button data-action="${t.desired_state === 'enabled' ? 'disable' : 'enable'}" data-id="${safe(t.id)}">${t.desired_state === 'enabled' ? 'Disable' : 'Enable'}</button><button class="danger" data-action="delete" data-id="${safe(t.id)}">Remove</button></div><pre id="probe-${safe(t.id)}" class="probe"></pre></article>`).join('') : '<p class="empty">No tunnels yet.</p>';
+    } catch (error) { $('connection').textContent = 'Offline'; $('connection').className = 'connection'; }
+    finally { loading = false; }
   }
-  $('new-tunnel').addEventListener('click', () => { const form = $('tunnel-form'); form.reset(); delete form.dataset.editId; $('tunnel-mode').textContent = 'NEW GRE TUNNEL'; $('tunnel-title').textContent = 'Desired configuration'; $('tunnel-submit').textContent = 'Queue tunnel'; tunnelDialog.showModal(); });
-  $('tunnel-form').addEventListener('submit', async event => { if (event.submitter?.value !== 'create') return; event.preventDefault(); const form = new FormData(event.currentTarget); const body = Object.fromEntries(form.entries()); body.type = 'gre'; body.mtu = Number(body.mtu); body.ttl = Number(body.ttl); const editId = event.currentTarget.dataset.editId; $('form-error').textContent = ''; try { await api(editId ? '/tunnels/' + encodeURIComponent(editId) : '/tunnels', { method: editId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }); tunnelDialog.close(); event.currentTarget.reset(); load(); } catch (error) { $('form-error').textContent = error.message; } });
-  $('tunnels').addEventListener('click', async event => { const button = event.target.closest('button[data-action]'); if (!button) return; const { id, action } = button.dataset; if (action === 'edit') { try { const tunnel = await api('/tunnels/' + encodeURIComponent(id)); const form = $('tunnel-form'); for (const key of ['name','address','local_endpoint','remote_endpoint','mtu','ttl','description']) form.elements[key].value = tunnel[key] || ''; form.dataset.editId = id; $('tunnel-mode').textContent = 'EDIT GRE TUNNEL'; $('tunnel-title').textContent = 'Update desired configuration'; $('tunnel-submit').textContent = 'Save changes'; tunnelDialog.showModal(); } catch (error) { alert(error.message); } return; } if (action === 'delete' && !confirm('Queue safe removal of this tunnel?')) return; button.disabled = true; try { await api('/tunnels/' + encodeURIComponent(id) + (action === 'delete' ? '' : '/' + action), { method: action === 'delete' ? 'DELETE' : 'POST' }); await load(); } catch (error) { alert(error.message); button.disabled = false; } });
-  $('refresh').addEventListener('click', load);
-  load(); setInterval(load, 10000);
+  $('refresh').onclick = load;
+	$('ipv4-forward').onchange = async event => { const control=event.currentTarget; control.disabled=true; try { await api('/network/ipv4-forward',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:control.checked})}); } catch(error) { alert(error.message); control.checked=!control.checked; } finally { control.disabled=false; } };
+  $('new-tunnel').onclick = () => { const f=$('tunnel-form'); f.reset(); delete f.dataset.id; $('tunnel-title').textContent='Add tunnel'; $('tunnel-submit').textContent='Create tunnel'; $('tunnel-dialog').showModal(); };
+  $('tunnels').onclick = async event => {
+    const button=event.target.closest('button[data-action]'); if (!button) return;
+    const {id,action}=button.dataset; button.disabled=true;
+    try {
+      if (action==='probe') { const r=await api('/tunnels/'+encodeURIComponent(id)+'/probe',{method:'POST'}); $('probe-'+id).textContent=r.reachable ? 'Internet reachable\n'+r.output : 'Internet probe failed\n'+r.output; return; }
+      if (action==='edit') { const t=await api('/tunnels/'+encodeURIComponent(id)); const f=$('tunnel-form'); ['name','address','local_endpoint','remote_endpoint','mtu','ttl','description'].forEach(k=>f.elements[k].value=t[k]||''); f.elements.masquerade.checked=!!t.masquerade; f.dataset.id=id; $('tunnel-title').textContent='Edit tunnel'; $('tunnel-submit').textContent='Save changes'; $('tunnel-dialog').showModal(); return; }
+      if (action==='delete' && !confirm('Remove this managed tunnel?')) return;
+      await api('/tunnels/'+encodeURIComponent(id)+(action==='delete'?'':'/'+action),{method:action==='delete'?'DELETE':'POST'}); await load();
+    } catch(error) { alert(error.message); } finally { button.disabled=false; }
+  };
+  $('tunnel-form').onsubmit = async event => { event.preventDefault(); const f=event.currentTarget; const data=Object.fromEntries(new FormData(f)); data.type='gre'; data.mtu=Number(data.mtu); data.ttl=Number(data.ttl); data.masquerade=f.elements.masquerade.checked; try { await api(f.dataset.id?'/tunnels/'+f.dataset.id:'/tunnels',{method:f.dataset.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); $('tunnel-dialog').close(); load(); } catch(error) { $('form-error').textContent=error.message; } };
+  load(); setInterval(load, 5000);
 })();
