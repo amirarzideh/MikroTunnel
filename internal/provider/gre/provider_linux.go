@@ -117,8 +117,11 @@ func create(tunnel domain.Tunnel) (netlink.Link, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load created GRE interface: %w", err)
 	}
-	if created.Attrs().Alias != ownershipMarker(tunnel) {
-		return nil, fmt.Errorf("refusing to manage %q because it is not owned by MikroTunnel", tunnel.Name)
+	// LinkAdd does not persist LinkAttrs.Alias for GRE links on all supported
+	// netlink/kernel combinations. Set it explicitly before any further
+	// configuration so subsequent reconciliations can prove ownership.
+	if err := netlink.LinkSetAlias(created, ownershipMarker(tunnel)); err != nil {
+		return nil, fmt.Errorf("mark GRE interface as managed: %w", err)
 	}
 	return created, nil
 }

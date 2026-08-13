@@ -14,7 +14,12 @@ fi
 
 read_value() {
   local prompt="$1" default="${2:-}" value
-  [[ -r /dev/tty ]] || { echo "An interactive terminal is required." >&2; exit 1; }
+  # A non-interactive installer (cloud-init, CI, or a piped command) must
+  # still produce a secure working default instead of failing on /dev/tty.
+  if [[ ! -r /dev/tty ]]; then
+    printf '%s' "${default}"
+    return
+  fi
   if [[ -n "${default}" ]]; then
     read -r -p "${prompt} [${default}]: " value < /dev/tty
     printf '%s' "${value:-${default}}"
