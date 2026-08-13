@@ -14,5 +14,9 @@ func Handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	return http.FileServer(http.FS(files))
+	static := http.FileServer(http.FS(files))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		static.ServeHTTP(w, r)
+	})
 }

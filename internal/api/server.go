@@ -183,6 +183,10 @@ func (s *Server) createTunnel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
+	if _, err := net.InterfaceByName(input.Name); err == nil {
+		writeError(w, http.StatusConflict, "an interface with this name already exists; remove it or choose another name")
+		return
+	}
 	now := time.Now().UTC()
 	t := domain.Tunnel{ID: store.NewID(), Name: input.Name, Type: input.Type, Local: input.Local, Remote: input.Remote, Address: input.Address, MTU: input.MTU, TTL: input.TTL, Description: input.Description, Masquerade: input.Masquerade, DesiredState: domain.DesiredEnabled, ActualState: domain.ActualPending, CreatedAt: now, UpdatedAt: now}
 	if err := s.store.CreateTunnel(r.Context(), t); err != nil {
