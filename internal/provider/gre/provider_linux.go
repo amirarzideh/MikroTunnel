@@ -154,7 +154,7 @@ func defaultRouteInterface() (string, error) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
 	if err != nil { return "", fmt.Errorf("list IPv4 routes: %w", err) }
 	for _, route := range routes {
-		if route.Dst != nil || route.LinkIndex == 0 { continue }
+		if route.LinkIndex == 0 || (route.Dst != nil && route.Dst.String() != "0.0.0.0/0") { continue }
 		link, err := netlink.LinkByIndex(route.LinkIndex)
 		if err == nil { return link.Attrs().Name, nil }
 	}
