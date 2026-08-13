@@ -4,6 +4,7 @@ package gre
 
 import (
 	"context"
+	"hash/crc32"
 	"errors"
 	"fmt"
 	"net"
@@ -131,25 +132,23 @@ func ensureMasquerade(tunnel domain.Tunnel, wanted bool) error {
 	// NAT belongs on the public egress interface, not the GRE interface. A
 	// packet entering GRE exits through the default route (ens160 here), so
 	// match this tunnel's IPv4 subnet and masquerade only on that egress.
-	_, subnet, err := net.ParseCIDR(tunnel.Address)
-	if err != nil { return fmt.Errorf("parse tunnel subnet for masquerade: %w", err) }
 	egress, err := defaultRouteInterface()
 	if err != nil { return err }
-	args := []string{"-t", "nat", "-C", "POSTROUTING", "-s", subnet.String(), "-o", egress, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
-	if exec.Command("iptables", args...).Run() == nil {
-		if wanted { return nil }
-		args[2] = "-D"
-		if output, deleteErr := exec.Command("iptables", args...).CombinedOutput(); deleteErr != nil { return fmt.Errorf("remove tunnel masquerade: %w: %s", deleteErr, output) }
+	mark := fmt.Sprintf("0x%x", (crc32.ChecksumIEEE([]byte(tunnel.ID))&0x7fffffff)|1)
+	markRule := []string{"-t", "mangle", "-C", "PREROUTING", "-i", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MARK", "--set-xmark", mark}
+	natRule := []string{"-t", "nat", "-C", "POSTROUTING", "-m", "mark", "--mark", mark, "-o", egress, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
+	if !wanted {
+		removeRule(markRule); removeRule(natRule)
+		// Cleanup earlier source/interface variants if this tunnel was managed by an older version.
+		_ = exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE").Run()
 		return nil
 	}
-	// Remove the legacy broken rule that used the GRE device as egress.
-	legacy := []string{"-t", "nat", "-D", "POSTROUTING", "-o", tunnel.Name, "-m", "comment", "--comment", comment, "-j", "MASQUERADE"}
-	_ = exec.Command("iptables", legacy...).Run()
-	if !wanted { return nil }
-	args[2] = "-A"
-	if output, err := exec.Command("iptables", args...).CombinedOutput(); err != nil { return fmt.Errorf("add tunnel masquerade: %w: %s", err, output) }
+	if exec.Command("iptables", markRule...).Run() != nil { add := append([]string{}, markRule...); add[2] = "-A"; if output, err := exec.Command("iptables", add...).CombinedOutput(); err != nil { return fmt.Errorf("mark tunnel ingress: %w: %s", err, output) } }
+	if exec.Command("iptables", natRule...).Run() != nil { add := append([]string{}, natRule...); add[2] = "-A"; if output, err := exec.Command("iptables", add...).CombinedOutput(); err != nil { return fmt.Errorf("add tunnel masquerade: %w: %s", err, output) } }
 	return nil
 }
+
+func removeRule(rule []string) { if exec.Command("iptables", rule...).Run() == nil { deleteRule := append([]string{}, rule...); deleteRule[2] = "-D"; _ = exec.Command("iptables", deleteRule...).Run() } }
 
 func defaultRouteInterface() (string, error) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
