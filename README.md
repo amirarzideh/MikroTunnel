@@ -33,6 +33,23 @@ go run ./cmd/mikrotunnel serve --config ./configs/development.yaml
 
 The first startup creates the database and prints a one-time bootstrap API key if no API key exists.
 
+## Service control
+
+The installer provides both `mikrotunnel` and the short alias `mikrotun`.
+
+```bash
+sudo mikrotun service status
+sudo mikrotun service restart
+sudo mikrotun service stop
+sudo mikrotun service start
+sudo mikrotun service disable
+sudo mikrotun service enable
+sudo mikrotun uninstall --yes          # keeps configuration and tunnel state
+sudo mikrotun uninstall --yes --purge  # permanently removes configuration and state
+```
+
+The reconciliation controller repairs missing, down, or drifted owned GRE interfaces. Failed repair attempts are retried automatically with capped exponential backoff (5 seconds to 5 minutes); a clean observation resets the retry counter. `systemd` also restarts the agent if its process exits.
+
 ## API outline
 
 ```text

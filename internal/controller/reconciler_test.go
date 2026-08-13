@@ -68,6 +68,15 @@ func TestReconcileCompletesCreateAndDeleteOperations(t *testing.T) {
 	}
 }
 
+func TestRetryDelayIsBounded(t *testing.T) {
+	if got := retryDelay(1); got != 5*time.Second {
+		t.Fatalf("first retry = %s", got)
+	}
+	if got := retryDelay(20); got != 5*time.Minute {
+		t.Fatalf("retry must be capped, got %s", got)
+	}
+}
+
 type fakeProvider struct{ removed bool }
 
 func (p *fakeProvider) Type() domain.TunnelType                        { return domain.TunnelGRE }

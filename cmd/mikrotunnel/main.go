@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -23,11 +24,83 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "serve" {
-		fmt.Fprintln(os.Stderr, "usage: mikrotunnel serve --config /etc/mikrotunnel/config.yaml")
-		os.Exit(2)
+	if len(os.Args) < 2 {
+		usage()
+		return
 	}
-	serve(os.Args[2:])
+	switch os.Args[1] {
+	case "serve":
+		serve(os.Args[2:])
+	case "service":
+		service(os.Args[2:])
+	case "uninstall":
+		uninstall(os.Args[2:])
+	case "version":
+		fmt.Println("MikroTunnel development")
+	default:
+		usage()
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage:\n  mikrotunnel serve --config /etc/mikrotunnel/config.yaml\n  mikrotunnel service <status|start|stop|restart|enable|disable>\n  mikrotunnel uninstall --yes [--purge]\n  mikrotunnel version")
+}
+
+func service(args []string) {
+	if len(args) != 1 {
+		usage()
+		return
+	}
+	action := args[0]
+	allowed := map[string]bool{"status": true, "start": true, "stop": true, "restart": true, "enable": true, "disable": true}
+	if !allowed[action] {
+		usage()
+		return
+	}
+	cmd := exec.Command("systemctl", action, "mikrotunnel.service")
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
+	if err := cmd.Run(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func uninstall(args []string) {
+	confirmed, purge := false, false
+	for _, arg := range args {
+		switch arg {
+		case "--yes":
+			confirmed = true
+		case "--purge":
+			purge = true
+		default:
+			usage()
+			return
+		}
+	}
+	if !confirmed {
+		fmt.Fprintln(os.Stderr, "refusing uninstall without --yes; use --purge to also delete configuration and state")
+		return
+	}
+	if os.Geteuid() != 0 {
+		fmt.Fprintln(os.Stderr, "uninstall must be run as root")
+		os.Exit(1)
+	}
+	_ = exec.Command("systemctl", "disable", "--now", "mikrotunnel.service").Run()
+	_ = os.Remove("/etc/systemd/system/mikrotunnel.service")
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+	if purge {
+		if err := os.RemoveAll("/etc/mikrotunnel"); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := os.RemoveAll("/var/lib/mikrotunnel"); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+	_ = os.Remove("/usr/local/bin/mikrotun")
+	_ = os.Remove("/usr/local/bin/mikrotunnel")
+	fmt.Println("MikroTunnel removed. Configuration and state were", map[bool]string{true: "purged", false: "preserved"}[purge]+".")
 }
 func serve(args []string) {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)

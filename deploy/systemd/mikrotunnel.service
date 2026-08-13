@@ -2,13 +2,15 @@
 Description=MikroTunnel network management agent
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=root
 Group=root
 ExecStart=/usr/local/bin/mikrotunnel serve --config /etc/mikrotunnel/config.yaml
-Restart=on-failure
+Restart=always
 RestartSec=5
 TimeoutStopSec=15
 NoNewPrivileges=false

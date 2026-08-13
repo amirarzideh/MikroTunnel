@@ -47,6 +47,14 @@ func reconcilePlatform(_ context.Context, tunnel domain.Tunnel) error {
 		return fmt.Errorf("find GRE interface: %w", err)
 	} else if link.Attrs().Alias != ownershipMarker(tunnel) {
 		return fmt.Errorf("refusing to manage %q because it is not owned by MikroTunnel", tunnel.Name)
+	} else if requiresRecreate(link, tunnel) {
+		if err := netlink.LinkDel(link); err != nil {
+			return fmt.Errorf("replace changed GRE interface: %w", err)
+		}
+		link, err = create(tunnel)
+		if err != nil {
+			return err
+		}
 	}
 	if err := netlink.LinkSetMTU(link, tunnel.MTU); err != nil {
 		return fmt.Errorf("set MTU: %w", err)
@@ -103,8 +111,28 @@ func ensureAddress(link netlink.Link, cidr string) error {
 	if err != nil {
 		return fmt.Errorf("parse interface address: %w", err)
 	}
-	if err := netlink.AddrAdd(link, addr); err != nil && !errors.Is(err, syscall.EEXIST) {
+	addresses, err := netlink.AddrList(link, netlink.FAMILY_V4)
+	if err != nil {
+		return fmt.Errorf("list interface addresses: %w", err)
+	}
+	for _, current := range addresses {
+		if current.String() == addr.String() {
+			continue
+		}
+		if err := netlink.AddrDel(link, &current); err != nil {
+			return fmt.Errorf("remove drifted interface address: %w", err)
+		}
+	}
+	if err := netlink.AddrReplace(link, addr); err != nil {
 		return fmt.Errorf("assign interface address: %w", err)
 	}
 	return nil
+}
+
+func requiresRecreate(link netlink.Link, tunnel domain.Tunnel) bool {
+	greLink, ok := link.(*netlink.Gretun)
+	if !ok {
+		return true
+	}
+	return !greLink.Local.Equal(net.ParseIP(tunnel.Local)) || !greLink.Remote.Equal(net.ParseIP(tunnel.Remote)) || greLink.Ttl != uint8(tunnel.TTL)
 }

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS tunnels (
  local_endpoint TEXT NOT NULL, remote_endpoint TEXT NOT NULL, address TEXT NOT NULL,
  mtu INTEGER NOT NULL, ttl INTEGER NOT NULL, description TEXT NOT NULL,
  desired_state TEXT NOT NULL, actual_state TEXT NOT NULL, last_error TEXT NOT NULL,
+ failure_count INTEGER NOT NULL DEFAULT 0, retry_at TEXT,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS operations (
@@ -51,16 +52,44 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 CREATE INDEX IF NOT EXISTS idx_operations_created_at ON operations(created_at DESC);
 `)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "tunnels", "failure_count", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	return s.ensureColumn(ctx, "tunnels", "retry_at", "TEXT")
+}
+
+func (s *SQLiteStore) ensureColumn(ctx context.Context, table, column, definition string) error {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, kind string
+		var notNull, primary int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &primary); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	_, err = s.db.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
 	return err
 }
 
 func (s *SQLiteStore) CreateTunnel(ctx context.Context, t domain.Tunnel) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO tunnels VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, t.ID, t.Name, t.Type, t.Local, t.Remote, t.Address, t.MTU, t.TTL, t.Description, t.DesiredState, t.ActualState, t.LastError, t.CreatedAt.UTC().Format(time.RFC3339Nano), t.UpdatedAt.UTC().Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO tunnels (id,name,type,local_endpoint,remote_endpoint,address,mtu,ttl,description,desired_state,actual_state,last_error,failure_count,retry_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, t.ID, t.Name, t.Type, t.Local, t.Remote, t.Address, t.MTU, t.TTL, t.Description, t.DesiredState, t.ActualState, t.LastError, t.FailureCount, nullableTime(t.RetryAt), t.CreatedAt.UTC().Format(time.RFC3339Nano), t.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
 }
 
 func (s *SQLiteStore) UpdateTunnel(ctx context.Context, t domain.Tunnel) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE tunnels SET name=?, type=?, local_endpoint=?, remote_endpoint=?, address=?, mtu=?, ttl=?, description=?, desired_state=?, actual_state=?, last_error=?, updated_at=? WHERE id=?`, t.Name, t.Type, t.Local, t.Remote, t.Address, t.MTU, t.TTL, t.Description, t.DesiredState, t.ActualState, t.LastError, t.UpdatedAt.UTC().Format(time.RFC3339Nano), t.ID)
+	res, err := s.db.ExecContext(ctx, `UPDATE tunnels SET name=?, type=?, local_endpoint=?, remote_endpoint=?, address=?, mtu=?, ttl=?, description=?, desired_state=?, actual_state=?, last_error=?, failure_count=?, retry_at=?, updated_at=? WHERE id=?`, t.Name, t.Type, t.Local, t.Remote, t.Address, t.MTU, t.TTL, t.Description, t.DesiredState, t.ActualState, t.LastError, t.FailureCount, nullableTime(t.RetryAt), t.UpdatedAt.UTC().Format(time.RFC3339Nano), t.ID)
 	if err != nil {
 		return err
 	}
@@ -83,11 +112,11 @@ func (s *SQLiteStore) DeleteTunnel(ctx context.Context, id string) error {
 	return nil
 }
 func (s *SQLiteStore) GetTunnel(ctx context.Context, id string) (domain.Tunnel, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,name,type,local_endpoint,remote_endpoint,address,mtu,ttl,description,desired_state,actual_state,last_error,created_at,updated_at FROM tunnels WHERE id=?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id,name,type,local_endpoint,remote_endpoint,address,mtu,ttl,description,desired_state,actual_state,last_error,failure_count,retry_at,created_at,updated_at FROM tunnels WHERE id=?`, id)
 	return scanTunnel(row)
 }
 func (s *SQLiteStore) ListTunnels(ctx context.Context) ([]domain.Tunnel, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,type,local_endpoint,remote_endpoint,address,mtu,ttl,description,desired_state,actual_state,last_error,created_at,updated_at FROM tunnels ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,name,type,local_endpoint,remote_endpoint,address,mtu,ttl,description,desired_state,actual_state,last_error,failure_count,retry_at,created_at,updated_at FROM tunnels ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +137,8 @@ type scanner interface{ Scan(...any) error }
 func scanTunnel(row scanner) (domain.Tunnel, error) {
 	var t domain.Tunnel
 	var created, updated string
-	err := row.Scan(&t.ID, &t.Name, &t.Type, &t.Local, &t.Remote, &t.Address, &t.MTU, &t.TTL, &t.Description, &t.DesiredState, &t.ActualState, &t.LastError, &created, &updated)
+	var retry sql.NullString
+	err := row.Scan(&t.ID, &t.Name, &t.Type, &t.Local, &t.Remote, &t.Address, &t.MTU, &t.TTL, &t.Description, &t.DesiredState, &t.ActualState, &t.LastError, &t.FailureCount, &retry, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return t, ErrNotFound
 	}
@@ -117,6 +147,10 @@ func scanTunnel(row scanner) (domain.Tunnel, error) {
 	}
 	t.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 	t.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+	if retry.Valid {
+		value, _ := time.Parse(time.RFC3339Nano, retry.String)
+		t.RetryAt = &value
+	}
 	return t, nil
 }
 

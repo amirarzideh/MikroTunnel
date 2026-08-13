@@ -17,6 +17,7 @@ This repository is deliberately built as a standalone, self-hosted control plane
 - Queue live-interface deletion durably, then remove only the owned interface.
 - Reconcile address, MTU, TTL and link state idempotently.
 - Detect manual changes and surface a precise drift/error state.
+- Repair drift automatically with capped exponential backoff (implemented).
 - Test with disposable Ubuntu virtual machines and namespace fixtures before production use.
 
 ## Milestone 3 — operational API (in progress)

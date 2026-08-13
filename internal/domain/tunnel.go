@@ -43,6 +43,8 @@ type Tunnel struct {
 	DesiredState DesiredState `json:"desired_state"`
 	ActualState  ActualState  `json:"actual_state"`
 	LastError    string       `json:"last_error,omitempty"`
+	FailureCount int          `json:"failure_count"`
+	RetryAt      *time.Time   `json:"retry_at,omitempty"`
 	CreatedAt    time.Time    `json:"created_at"`
 	UpdatedAt    time.Time    `json:"updated_at"`
 }

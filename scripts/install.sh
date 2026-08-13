@@ -40,6 +40,7 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 curl --fail --location --retry 3 --output "${tmp_dir}/release.tar.gz" "${release_url}"
 tar -xzf "${tmp_dir}/release.tar.gz" -C "${tmp_dir}"
 install -m 0755 "${tmp_dir}/mikrotunnel" "${INSTALL_DIR}/mikrotunnel"
+ln -sfn "${INSTALL_DIR}/mikrotunnel" "${INSTALL_DIR}/mikrotun"
 
 install -d -m 0750 "${CONFIG_DIR}" "${DATA_DIR}"
 if [[ ! -f "${CONFIG_DIR}/config.yaml" ]]; then

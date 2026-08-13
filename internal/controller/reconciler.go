@@ -51,6 +51,9 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) {
 	}
 }
 func (r *Reconciler) ReconcileOne(ctx context.Context, t domain.Tunnel) error {
+	if t.RetryAt != nil && time.Now().Before(*t.RetryAt) {
+		return nil
+	}
 	p, ok := r.providers[t.Type]
 	if !ok {
 		return r.fail(t, fmt.Sprintf("provider %q is not installed", t.Type))
@@ -85,13 +88,36 @@ func (r *Reconciler) ReconcileOne(ctx context.Context, t domain.Tunnel) error {
 func (r *Reconciler) mark(t domain.Tunnel, state domain.ActualState, message string) error {
 	t.ActualState = state
 	t.LastError = message
+	if state == domain.ActualUp || state == domain.ActualDown {
+		t.FailureCount = 0
+		t.RetryAt = nil
+	}
 	t.UpdatedAt = time.Now()
 	return r.store.UpdateTunnel(context.Background(), t)
 }
 
 func (r *Reconciler) fail(t domain.Tunnel, message string) error {
+	t.FailureCount++
+	delay := retryDelay(t.FailureCount)
+	nextRetry := time.Now().UTC().Add(delay)
+	t.RetryAt = &nextRetry
 	if err := r.mark(t, domain.ActualError, message); err != nil {
 		return err
 	}
-	return r.store.CompleteOperations(context.Background(), t.ID, domain.OperationFailed, message)
+	r.logger.Warn("tunnel repair failed; retry scheduled", "tunnel", t.ID, "attempt", t.FailureCount, "retry_in", delay, "error", message)
+	return r.store.CompleteOperations(context.Background(), t.ID, domain.OperationFailed, fmt.Sprintf("%s; automatic retry in %s", message, delay))
+}
+
+func retryDelay(failures int) time.Duration {
+	if failures < 1 {
+		return 0
+	}
+	delay := 5 * time.Second
+	for i := 1; i < failures && delay < 5*time.Minute; i++ {
+		delay *= 2
+	}
+	if delay > 5*time.Minute {
+		return 5 * time.Minute
+	}
+	return delay
 }

@@ -6,6 +6,7 @@
     <meta name="color-scheme" content="dark">
     <title>MikroTunnel</title>
     <link rel="stylesheet" href="/dashboard.css">
+    <link rel="stylesheet" href="/repair.css">
   </head>
   <body>
     <div class="aurora aurora-one"></div><div class="aurora aurora-two"></div>
@@ -17,7 +18,7 @@
       <section class="panel"><div class="section-heading"><div><p class="eyebrow">ACTIVITY</p><h2>Recent operations</h2></div><button class="quiet" id="refresh">Refresh</button></div><div class="operations" id="operations"><p class="empty">No activity loaded.</p></div></section>
     </main>
     <dialog id="connect-dialog"><form method="dialog" class="dialog-card" id="connect-form"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">SECURE LOCAL SESSION</p><h2>Connect to this agent</h2><p class="subtle">Paste an API key. It stays only in this browser tab and is never written to disk.</p><label>API key<input id="api-key" type="password" autocomplete="off" placeholder="mt_…" required></label><button class="primary" value="connect">Connect</button></form></dialog>
-    <dialog id="tunnel-dialog"><form method="dialog" class="dialog-card" id="tunnel-form"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">NEW GRE TUNNEL</p><h2>Desired configuration</h2><div class="fields"><label>Name<input name="name" required pattern="[A-Za-z][A-Za-z0-9_-]{0,14}" placeholder="eu-gre-1"></label><label>Interface address<input name="address" required placeholder="10.10.0.1/30"></label><label>Local endpoint<input name="local_endpoint" required placeholder="198.51.100.10"></label><label>Remote endpoint<input name="remote_endpoint" required placeholder="203.0.113.20"></label><label>MTU<input name="mtu" type="number" min="576" max="9000" value="1476"></label><label>TTL<input name="ttl" type="number" min="1" max="255" value="255"></label></div><label>Description<input name="description" placeholder="Optional"></label><p class="form-error" id="form-error"></p><button class="primary" value="create">Queue tunnel</button></form></dialog>
+    <dialog id="tunnel-dialog"><form method="dialog" class="dialog-card" id="tunnel-form"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow" id="tunnel-mode">NEW GRE TUNNEL</p><h2 id="tunnel-title">Desired configuration</h2><div class="fields"><label>Name<input name="name" required pattern="[A-Za-z][A-Za-z0-9_-]{0,14}" placeholder="eu-gre-1"></label><label>Interface address<input name="address" required placeholder="10.10.0.1/30"></label><label>Local endpoint<input name="local_endpoint" required placeholder="198.51.100.10"></label><label>Remote endpoint<input name="remote_endpoint" required placeholder="203.0.113.20"></label><label>MTU<input name="mtu" type="number" min="576" max="9000" value="1476"></label><label>TTL<input name="ttl" type="number" min="1" max="255" value="255"></label></div><label>Description<input name="description" placeholder="Optional"></label><p class="form-error" id="form-error"></p><button class="primary" value="create" id="tunnel-submit">Queue tunnel</button></form></dialog>
     <script src="/dashboard.js"></script>
   </body>
 </html>
