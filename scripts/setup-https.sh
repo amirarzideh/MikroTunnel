@@ -80,6 +80,7 @@ ${tls_config}
   reverse_proxy 127.0.0.1:8787
 }
 EOF
+  chmod 0644 "${SITE_FILE}"
   caddy validate --config "${CADDYFILE}" --adapter caddyfile
   systemctl enable --now caddy
   systemctl restart caddy
@@ -117,6 +118,7 @@ https://${host} {
   reverse_proxy 127.0.0.1:8787
 }
 EOF
+chmod 0644 "${SITE_FILE}"
 caddy validate --config "${CADDYFILE}" --adapter caddyfile
 systemctl enable --now caddy
 systemctl restart caddy
@@ -179,6 +181,7 @@ https://${host} {
   reverse_proxy 127.0.0.1:8787
 }
 EOF
+chmod 0644 "${SITE_FILE}"
 caddy validate --config "${CADDYFILE}" --adapter caddyfile
 systemctl restart caddy
 systemctl --quiet is-active caddy
