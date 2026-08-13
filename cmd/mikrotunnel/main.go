@@ -156,6 +156,9 @@ func serve(args []string) {
 		logger.Error("persistent API key is invalid")
 		os.Exit(1)
 	}
+	if err := restoreForwardingRule(); err != nil {
+		logger.Warn("restore IPv4 forwarding rule", "error", err)
+	}
 	started := time.Now()
 	server := api.New(db, system.NewInspector(started), logger, apiKey, cfg.Security.DashboardUser, cfg.Security.DashboardPassword)
 	reconciler := controller.New(db, []domain.TunnelProvider{gre.Provider{}}, logger)
@@ -172,4 +175,13 @@ func serve(args []string) {
 		logger.Error("HTTP server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func restoreForwardingRule() error {
+	value, err := os.ReadFile("/proc/sys/net/ipv4/ip_forward")
+	if err != nil || strings.TrimSpace(string(value)) != "1" { return err }
+	args := []string{"-C", "FORWARD", "-m", "comment", "--comment", "mikrotunnel:ipv4-forward", "-j", "ACCEPT"}
+	if exec.Command("iptables", args...).Run() == nil { return nil }
+	args[0] = "-A"
+	return exec.Command("iptables", args...).Run()
 }
