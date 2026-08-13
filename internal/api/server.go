@@ -74,9 +74,23 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.networkSettings(w)
 	case r.Method == http.MethodPut && path == "/network/ipv4-forward":
 		s.setIPv4Forward(w, r)
+	case r.Method == http.MethodGet && path == "/interfaces":
+		s.listInterfaces(w)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/interfaces/"):
+		s.deleteInterface(w, strings.TrimPrefix(path, "/interfaces/"))
 	default:
 		writeError(w, http.StatusNotFound, "route not found")
 	}
+}
+func (s *Server) listInterfaces(w http.ResponseWriter) {
+	items, err := gre.Discover()
+	if err != nil { writeError(w, 500, "could not discover GRE interfaces"); return }
+	writeJSON(w, 200, map[string]any{"items": items})
+}
+func (s *Server) deleteInterface(w http.ResponseWriter, name string) {
+	if name == "" || strings.ContainsAny(name, "/\\") { writeError(w, 400, "invalid interface name"); return }
+	if err := gre.RemoveDiscovered(name); err != nil { writeError(w, 400, "could not remove GRE interface: "+err.Error()); return }
+	writeJSON(w, 200, map[string]bool{"removed": true})
 }
 func (s *Server) networkSettings(w http.ResponseWriter) {
 	value, err := os.ReadFile("/proc/sys/net/ipv4/ip_forward")

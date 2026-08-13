@@ -62,6 +62,16 @@ type TunnelInput struct {
 	Masquerade  bool       `json:"masquerade"`
 }
 
+type DiscoveredTunnel struct {
+	Name    string `json:"name"`
+	Local   string `json:"local_endpoint"`
+	Remote  string `json:"remote_endpoint"`
+	Address string `json:"address,omitempty"`
+	MTU     int    `json:"mtu"`
+	TTL     int    `json:"ttl"`
+	Alias   string `json:"alias,omitempty"`
+}
+
 type TunnelProvider interface {
 	Type() TunnelType
 	Validate(TunnelInput) error

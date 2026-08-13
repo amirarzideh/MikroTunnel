@@ -17,6 +17,28 @@ import (
 
 func ownershipMarker(tunnel domain.Tunnel) string { return "mikrotunnel:" + tunnel.ID }
 
+func Discover() ([]domain.DiscoveredTunnel, error) {
+	links, err := netlink.LinkList()
+	if err != nil { return nil, fmt.Errorf("list GRE interfaces: %w", err) }
+	out := make([]domain.DiscoveredTunnel, 0)
+	for _, link := range links {
+		g, ok := link.(*netlink.Gretun)
+		if !ok || g.Local == nil || g.Remote == nil || g.Local.IsUnspecified() || g.Remote.IsUnspecified() { continue }
+		item := domain.DiscoveredTunnel{Name: link.Attrs().Name, Local: g.Local.String(), Remote: g.Remote.String(), MTU: link.Attrs().MTU, TTL: int(g.Ttl), Alias: link.Attrs().Alias}
+		addresses, addrErr := netlink.AddrList(link, netlink.FAMILY_V4)
+		if addrErr == nil && len(addresses) > 0 { item.Address = addresses[0].String() }
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func RemoveDiscovered(name string) error {
+	link, err := netlink.LinkByName(name)
+	if err != nil { return err }
+	if _, ok := link.(*netlink.Gretun); !ok { return fmt.Errorf("%q is not a GRE interface", name) }
+	return netlink.LinkDel(link)
+}
+
 func observePlatform(_ context.Context, tunnel domain.Tunnel) (domain.ActualState, string, error) {
 	link, err := netlink.LinkByName(tunnel.Name)
 	if isLinkNotFound(err) {

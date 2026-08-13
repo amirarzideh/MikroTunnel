@@ -12,10 +12,13 @@
   async function load() {
     if (loading) return; loading = true;
     try {
-      const [{items=[]}, settings] = await Promise.all([api('/tunnels'), api('/network/settings')]);
+	  const [{items=[]}, settings, discovered] = await Promise.all([api('/tunnels'), api('/network/settings'), api('/interfaces')]);
 	  $('ipv4-forward').checked = !!settings.ipv4_forward;
       $('connection').textContent = 'Live'; $('connection').className = 'connection connected';
-      $('tunnels').innerHTML = items.length ? items.map(t => `<article class="tunnel-card"><div class="tunnel-top"><div><strong>${safe(t.name)}</strong><span>${safe(t.local_endpoint)} → ${safe(t.remote_endpoint)} · ${safe(t.address)}</span></div>${badge(t.actual_state)}</div><div class="tunnel-meta">${badge(t.desired_state)} ${t.masquerade ? '<span class="badge enabled">NAT enabled</span>' : ''}${t.last_error ? `<span class="error">${safe(t.last_error)}</span>` : ''}</div><div class="tunnel-actions"><button data-action="probe" data-id="${safe(t.id)}">Ping internet</button><button data-action="edit" data-id="${safe(t.id)}">Edit</button><button data-action="${t.desired_state === 'enabled' ? 'disable' : 'enable'}" data-id="${safe(t.id)}">${t.desired_state === 'enabled' ? 'Disable' : 'Enable'}</button><button class="danger" data-action="delete" data-id="${safe(t.id)}">Remove</button></div><pre id="probe-${safe(t.id)}" class="probe"></pre></article>`).join('') : '<p class="empty">No tunnels yet.</p>';
+	  const known = new Set(items.map(t => t.name)); const unmanaged = (discovered.items||[]).filter(t => !known.has(t.name));
+	  const managed = items.map(t => `<article class="tunnel-card"><div class="tunnel-top"><div><strong>${safe(t.name)}</strong><span>${safe(t.local_endpoint)} → ${safe(t.remote_endpoint)} · ${safe(t.address)}</span></div>${badge(t.actual_state)}</div><div class="tunnel-meta">${badge(t.desired_state)} ${t.masquerade ? '<span class="badge enabled">NAT enabled</span>' : ''}${t.last_error ? `<span class="error">${safe(t.last_error)}</span>` : ''}</div><div class="tunnel-actions"><button data-action="probe" data-id="${safe(t.id)}">Ping internet</button><button data-action="edit" data-id="${safe(t.id)}">Edit</button><button data-action="${t.desired_state === 'enabled' ? 'disable' : 'enable'}" data-id="${safe(t.id)}">${t.desired_state === 'enabled' ? 'Disable' : 'Enable'}</button><button class="danger" data-action="delete" data-id="${safe(t.id)}">Remove</button></div><pre id="probe-${safe(t.id)}" class="probe"></pre></article>`).join('');
+	  const found = unmanaged.map(t => `<article class="tunnel-card"><div class="tunnel-top"><div><strong>${safe(t.name)}</strong><span>${safe(t.local_endpoint)} → ${safe(t.remote_endpoint)} · ${safe(t.address||'no IPv4 address')}</span></div><span class="badge">discovered</span></div><div class="tunnel-meta"><span class="error">Not in MikroTunnel state</span></div><div class="tunnel-actions"><button class="danger" data-action="remove-discovered" data-name="${safe(t.name)}">Remove interface</button></div></article>`).join('');
+	  $('tunnels').innerHTML = managed + found || '<p class="empty">No GRE interfaces found.</p>';
     } catch (error) { $('connection').textContent = 'Offline'; $('connection').className = 'connection'; }
     finally { loading = false; }
   }
@@ -24,9 +27,10 @@
   $('new-tunnel').onclick = () => { const f=$('tunnel-form'); f.reset(); delete f.dataset.id; $('tunnel-title').textContent='Add tunnel'; $('tunnel-submit').textContent='Create tunnel'; $('tunnel-dialog').showModal(); };
   $('tunnels').onclick = async event => {
     const button=event.target.closest('button[data-action]'); if (!button) return;
-    const {id,action}=button.dataset; button.disabled=true;
+	const {id,action,name}=button.dataset; button.disabled=true;
     try {
-      if (action==='probe') { const r=await api('/tunnels/'+encodeURIComponent(id)+'/probe',{method:'POST'}); $('probe-'+id).textContent=r.reachable ? 'Internet reachable\n'+r.output : 'Internet probe failed\n'+r.output; return; }
+	  if (action==='remove-discovered') { if (!confirm('Remove the discovered GRE interface '+name+'?')) return; await api('/interfaces/'+encodeURIComponent(name),{method:'DELETE'}); await load(); return; }
+	  if (action==='probe') { const r=await api('/tunnels/'+encodeURIComponent(id)+'/probe',{method:'POST'}); $('probe-'+id).textContent=r.reachable ? 'Internet reachable\n'+r.output : 'Internet probe failed\n'+r.output; return; }
       if (action==='edit') { const t=await api('/tunnels/'+encodeURIComponent(id)); const f=$('tunnel-form'); ['name','address','local_endpoint','remote_endpoint','mtu','ttl','description'].forEach(k=>f.elements[k].value=t[k]||''); f.elements.masquerade.checked=!!t.masquerade; f.dataset.id=id; $('tunnel-title').textContent='Edit tunnel'; $('tunnel-submit').textContent='Save changes'; $('tunnel-dialog').showModal(); return; }
       if (action==='delete' && !confirm('Remove this managed tunnel?')) return;
       await api('/tunnels/'+encodeURIComponent(id)+(action==='delete'?'':'/'+action),{method:action==='delete'?'DELETE':'POST'}); await load();
