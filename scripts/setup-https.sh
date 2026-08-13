@@ -5,7 +5,7 @@ readonly CADDYFILE="/etc/caddy/Caddyfile"
 readonly INCLUDE_DIR="/etc/caddy/Caddyfile.d"
 readonly SITE_FILE="${INCLUDE_DIR}/mikrotunnel.caddy"
 readonly ACME_ROOT="/var/lib/caddy/mikrotunnel-acme"
-readonly TLS_DIR="/etc/mikrotunnel/tls"
+readonly TLS_DIR="/etc/caddy/mikrotunnel-tls"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root: sudo mikrotun setup https" >&2
@@ -129,8 +129,8 @@ cat > /usr/local/lib/mikrotunnel/refresh-ip-certificate.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 lineage="$1"
-install -m 0644 -o root -g caddy "${lineage}/fullchain.pem" /etc/mikrotunnel/tls/certificate.pem
-install -m 0640 -o root -g caddy "${lineage}/privkey.pem" /etc/mikrotunnel/tls/private-key.pem
+install -m 0644 -o root -g caddy "${lineage}/fullchain.pem" /etc/caddy/mikrotunnel-tls/certificate.pem
+install -m 0640 -o root -g caddy "${lineage}/privkey.pem" /etc/caddy/mikrotunnel-tls/private-key.pem
 systemctl reload caddy
 EOF
 chmod 0750 /usr/local/lib/mikrotunnel/refresh-ip-certificate.sh

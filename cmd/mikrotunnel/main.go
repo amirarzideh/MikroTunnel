@@ -115,6 +115,14 @@ func uninstall(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+		_ = os.Remove("/etc/caddy/Caddyfile.d/mikrotunnel.caddy")
+		_ = os.RemoveAll("/etc/caddy/mikrotunnel-tls")
+		_ = os.RemoveAll("/var/lib/caddy/mikrotunnel-acme")
+		_ = os.Remove("/etc/systemd/system/mikrotunnel-ip-certificate-renew.service")
+		_ = os.Remove("/etc/systemd/system/mikrotunnel-ip-certificate-renew.timer")
+		_ = os.RemoveAll("/usr/local/lib/mikrotunnel")
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+		_ = exec.Command("systemctl", "reload", "caddy.service").Run()
 	}
 	_ = os.Remove("/usr/local/bin/mikrotun")
 	_ = os.Remove("/usr/local/bin/mikrotunnel")
