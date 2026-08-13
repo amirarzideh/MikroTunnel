@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/vishvananda/netlink"
@@ -37,6 +38,14 @@ func RemoveDiscovered(name string) error {
 	if err != nil { return err }
 	if _, ok := link.(*netlink.Gretun); !ok { return fmt.Errorf("%q is not a GRE interface", name) }
 	return netlink.LinkDel(link)
+}
+
+func Adopt(name, marker string) error {
+	link, err := netlink.LinkByName(name)
+	if err != nil { return err }
+	if _, ok := link.(*netlink.Gretun); !ok { return fmt.Errorf("%q is not a GRE interface", name) }
+	if !strings.HasPrefix(link.Attrs().Alias, "mikrotunnel:") { return fmt.Errorf("refusing to adopt a GRE interface not previously managed by MikroTunnel") }
+	return markOwnership(link, marker)
 }
 
 func observePlatform(_ context.Context, tunnel domain.Tunnel) (domain.ActualState, string, error) {

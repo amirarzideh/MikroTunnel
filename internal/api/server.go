@@ -78,6 +78,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.listInterfaces(w)
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/interfaces/"):
 		s.deleteInterface(w, strings.TrimPrefix(path, "/interfaces/"))
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/interfaces/") && strings.HasSuffix(path, "/import"):
+		s.importInterface(w, strings.TrimSuffix(strings.TrimPrefix(path, "/interfaces/"), "/import"), r)
 	default:
 		writeError(w, http.StatusNotFound, "route not found")
 	}
@@ -91,6 +93,22 @@ func (s *Server) deleteInterface(w http.ResponseWriter, name string) {
 	if name == "" || strings.ContainsAny(name, "/\\") { writeError(w, 400, "invalid interface name"); return }
 	if err := gre.RemoveDiscovered(name); err != nil { writeError(w, 400, "could not remove GRE interface: "+err.Error()); return }
 	writeJSON(w, 200, map[string]bool{"removed": true})
+}
+func (s *Server) importInterface(w http.ResponseWriter, name string, r *http.Request) {
+	items, err := gre.Discover()
+	if err != nil { writeError(w, 500, "could not discover GRE interfaces"); return }
+	var found *domain.DiscoveredTunnel
+	for i := range items { if items[i].Name == name { found = &items[i]; break } }
+	if found == nil { writeError(w, 404, "GRE interface not found"); return }
+	if !strings.HasPrefix(found.Alias, "mikrotunnel:") { writeError(w, 409, "only a previously MikroTunnel-managed interface may be imported"); return }
+	if found.Address == "" { writeError(w, 409, "GRE interface has no IPv4 address"); return }
+	if _, err := s.store.ListTunnels(r.Context()); err != nil { writeError(w, 500, "could not check tunnel state"); return }
+	now := time.Now().UTC()
+	t := domain.Tunnel{ID: store.NewID(), Name: found.Name, Type: domain.TunnelGRE, Local: found.Local, Remote: found.Remote, Address: found.Address, MTU: found.MTU, TTL: found.TTL, DesiredState: domain.DesiredEnabled, ActualState: domain.ActualPending, CreatedAt: now, UpdatedAt: now}
+	if err := s.store.CreateTunnel(r.Context(), t); err != nil { writeError(w, 409, "a tunnel with this name already exists"); return }
+	if err := gre.Adopt(name, "mikrotunnel:"+t.ID); err != nil { _ = s.store.DeleteTunnel(r.Context(), t.ID); writeError(w, 400, "could not import GRE interface: "+err.Error()); return }
+	s.operation(r, t.ID, "import_tunnel", domain.OperationQueued, "existing GRE interface adopted; waiting for reconciliation")
+	writeJSON(w, 201, t)
 }
 func (s *Server) networkSettings(w http.ResponseWriter) {
 	value, err := os.ReadFile("/proc/sys/net/ipv4/ip_forward")
