@@ -4,6 +4,7 @@ set -euo pipefail
 readonly CADDYFILE="/etc/caddy/Caddyfile"
 readonly INCLUDE_DIR="/etc/caddy/Caddyfile.d"
 readonly SITE_FILE="${INCLUDE_DIR}/mikrotunnel.caddy"
+readonly ACME_ROOT="/var/lib/mikrotunnel/acme-webroot"
 readonly TLS_DIR="/etc/mikrotunnel/tls"
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -12,27 +13,47 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 read_value() {
-  local prompt="$1" value
+  local prompt="$1" default="${2:-}" value
   [[ -r /dev/tty ]] || { echo "An interactive terminal is required." >&2; exit 1; }
-  read -r -p "${prompt}: " value < /dev/tty
-  printf '%s' "${value}"
+  if [[ -n "${default}" ]]; then
+    read -r -p "${prompt} [${default}]: " value < /dev/tty
+    printf '%s' "${value:-${default}}"
+  else
+    read -r -p "${prompt}: " value < /dev/tty
+    printf '%s' "${value}"
+  fi
 }
 
 valid_host() { [[ "$1" =~ ^[A-Za-z0-9.-]+$ ]] && [[ "$1" != *..* ]] && [[ "$1" != .* ]] && [[ "$1" != *- ]]; }
-valid_email() { [[ "$1" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; }
+valid_email() { [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; }
+is_ipv4() { [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; }
 
+public_ip="$(curl -4fsS --max-time 8 https://api.ipify.org 2>/dev/null || true)"
 echo "MikroTunnel secure remote access"
-echo "1) Domain name + automatic Let's Encrypt certificate"
-echo "2) IP address or domain + certificate and key you already own"
-mode="$(read_value 'Choose 1 or 2')"
+echo "Enter a domain name for standard automatic HTTPS, or keep the public-IP default."
+host="$(read_value 'Public hostname or IP address' "${public_ip}")"
+email="$(read_value 'Email for certificate expiry notices')"
+valid_host "${host}" || { echo "Invalid hostname or IP address." >&2; exit 1; }
+valid_email "${email}" || { echo "Invalid email." >&2; exit 1; }
 
-case "${mode}" in
-  1)
-    host="$(read_value 'Domain name (DNS A/AAAA must point to this server)')"
-    email="$(read_value 'Email for certificate expiry notices')"
-    valid_host "${host}" || { echo "Invalid domain name." >&2; exit 1; }
-    valid_email "${email}" || { echo "Invalid email." >&2; exit 1; }
-    site=$(cat <<EOF
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y caddy ca-certificates
+install -d -m 0755 "${INCLUDE_DIR}" "${ACME_ROOT}"
+if ! grep -Fq 'import /etc/caddy/Caddyfile.d/*' "${CADDYFILE}"; then
+  cp "${CADDYFILE}" "${CADDYFILE}.mikrotunnel-backup-$(date +%s)"
+  printf '\n# MikroTunnel managed sites\nimport /etc/caddy/Caddyfile.d/*\n' >> "${CADDYFILE}"
+fi
+
+common_headers='header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "same-origin"
+  }'
+
+if ! is_ipv4 "${host}"; then
+  cat > "${SITE_FILE}" <<EOF
 ${host} {
   tls {
     issuer acme {
@@ -40,66 +61,98 @@ ${host} {
     }
   }
   encode zstd gzip
-  header {
-    Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "DENY"
-    Referrer-Policy "same-origin"
-  }
+  ${common_headers}
   reverse_proxy 127.0.0.1:8787
 }
 EOF
-)
-    public_url="https://${host}"
-    ;;
-  2)
-    host="$(read_value 'Public IP address or hostname')"
-    cert="$(read_value 'Full path to PEM certificate')"
-    key="$(read_value 'Full path to PEM private key')"
-    valid_host "${host}" || { echo "Invalid IP address or hostname." >&2; exit 1; }
-    [[ -f "${cert}" && -f "${key}" ]] || { echo "Certificate or private key file does not exist." >&2; exit 1; }
-    ;;
-  *) echo "Choose 1 or 2." >&2; exit 1 ;;
-esac
-
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y caddy ca-certificates
-
-install -d -m 0755 "${INCLUDE_DIR}"
-if ! grep -Fq 'import /etc/caddy/Caddyfile.d/*' "${CADDYFILE}"; then
-  cp "${CADDYFILE}" "${CADDYFILE}.mikrotunnel-backup-$(date +%s)"
-  printf '\n# MikroTunnel managed sites\nimport /etc/caddy/Caddyfile.d/*\n' >> "${CADDYFILE}"
+  caddy validate --config "${CADDYFILE}" --adapter caddyfile
+  systemctl enable --now caddy
+  systemctl restart caddy
+  systemctl --quiet is-active caddy
+  echo "Secure access is ready: https://${host}"
+  echo "Caddy will obtain and renew the certificate automatically."
+  exit 0
 fi
 
-if [[ "${mode}" == "2" ]]; then
-  install -d -m 0750 -o root -g caddy "${TLS_DIR}"
-  install -m 0644 -o root -g caddy "${cert}" "${TLS_DIR}/certificate.pem"
-  install -m 0640 -o root -g caddy "${key}" "${TLS_DIR}/private-key.pem"
-  site=$(cat <<EOF
-https://${host} {
-  tls ${TLS_DIR}/certificate.pem ${TLS_DIR}/private-key.pem
-  encode zstd gzip
-  header {
-    Strict-Transport-Security "max-age=31536000"
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "DENY"
-    Referrer-Policy "same-origin"
+if ! command -v snap >/dev/null 2>&1; then
+  apt-get install -y snapd
+fi
+snap install --classic certbot || snap refresh certbot
+ln -sfn /snap/bin/certbot /usr/local/bin/certbot
+if ! certbot --help all | grep -q -- '--ip-address'; then
+  echo "Installed Certbot does not support automatic IP certificates." >&2
+  exit 1
+fi
+
+cat > "${SITE_FILE}" <<EOF
+http://${host} {
+  handle /.well-known/acme-challenge/* {
+    root * ${ACME_ROOT}
+    file_server
   }
-  reverse_proxy 127.0.0.1:8787
+  redir https://${host}{uri}
 }
 EOF
-)
-  public_url="https://${host}"
-fi
-
-printf '%s\n' "${site}" > "${SITE_FILE}"
 caddy validate --config "${CADDYFILE}" --adapter caddyfile
 systemctl enable --now caddy
 systemctl restart caddy
+
+certbot certonly --non-interactive --agree-tos --email "${email}" --preferred-profile shortlived --webroot --webroot-path "${ACME_ROOT}" --ip-address "${host}"
+
+install -d -m 0750 -o root -g caddy "${TLS_DIR}"
+cat > /usr/local/lib/mikrotunnel/refresh-ip-certificate.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+lineage="$1"
+install -m 0644 -o root -g caddy "${lineage}/fullchain.pem" /etc/mikrotunnel/tls/certificate.pem
+install -m 0640 -o root -g caddy "${lineage}/privkey.pem" /etc/mikrotunnel/tls/private-key.pem
+systemctl reload caddy
+EOF
+chmod 0750 /usr/local/lib/mikrotunnel/refresh-ip-certificate.sh
+/usr/local/lib/mikrotunnel/refresh-ip-certificate.sh "/etc/letsencrypt/live/${host}"
+cat > /etc/systemd/system/mikrotunnel-ip-certificate-renew.service <<'EOF'
+[Unit]
+Description=Renew MikroTunnel public-IP certificate
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/certbot renew --quiet --deploy-hook '/usr/local/lib/mikrotunnel/refresh-ip-certificate.sh "$RENEWED_LINEAGE"'
+EOF
+cat > /etc/systemd/system/mikrotunnel-ip-certificate-renew.timer <<'EOF'
+[Unit]
+Description=Renew MikroTunnel public-IP certificate twice daily
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now mikrotunnel-ip-certificate-renew.timer
+
+cat > "${SITE_FILE}" <<EOF
+http://${host} {
+  handle /.well-known/acme-challenge/* {
+    root * ${ACME_ROOT}
+    file_server
+  }
+  redir https://${host}{uri}
+}
+
+https://${host} {
+  tls ${TLS_DIR}/certificate.pem ${TLS_DIR}/private-key.pem
+  encode zstd gzip
+  ${common_headers}
+  reverse_proxy 127.0.0.1:8787
+}
+EOF
+caddy validate --config "${CADDYFILE}" --adapter caddyfile
+systemctl restart caddy
 systemctl --quiet is-active caddy
 
-echo
-echo "Secure access is ready: ${public_url}"
-echo "The MikroTunnel agent remains private on 127.0.0.1:8787."
+echo "Secure access is ready: https://${host}"
+echo "The IP certificate is short-lived; Certbot renews it automatically."
 echo "Ensure your firewall/security group allows TCP 80 and 443."

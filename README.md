@@ -52,13 +52,13 @@ The reconciliation controller repairs missing, down, or drifted owned GRE interf
 
 ## Secure remote dashboard
 
-The agent always remains bound to loopback. Use a dedicated HTTPS reverse proxy rather than exposing its HTTP port:
+The agent always remains bound to loopback. On first installation, secure remote access is a required interactive step: it detects the public IP as the default hostname, requests only an email address, then obtains the certificate itself. Use a domain for a conventional automatically renewed Caddy certificate. Keeping the public-IP default uses a short-lived Let's Encrypt IP certificate and installs an automatic Certbot renewal timer.
 
 ```bash
 sudo mikrotun setup https
 ```
 
-The wizard offers a domain with an automatically managed Let's Encrypt certificate, or an IP/domain with a PEM certificate and private key you already own. It publishes only Caddy on ports 80/443 and leaves MikroTunnel at `127.0.0.1:8787`.
+The wizard publishes only Caddy on ports 80/443 and leaves MikroTunnel at `127.0.0.1:8787`. For non-interactive automation only, set `MIKROTUNNEL_SKIP_HTTPS=1`; that deliberately leaves remote access disabled.
 
 ## API outline
 
