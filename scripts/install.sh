@@ -68,6 +68,7 @@ if [[ ! -s "${CONFIG_DIR}/api-key.txt" ]]; then
   printf 'mt_%s\n' "$(od -An -N 32 -tx1 /dev/urandom | tr -d ' \n')" > "${CONFIG_DIR}/api-key.txt"
 fi
 chmod 0600 "${CONFIG_DIR}/api-key.txt"
+umask 022
 
 install -m 0644 "${tmp_dir}/mikrotunnel.service" /etc/systemd/system/mikrotunnel.service
 systemctl daemon-reload
