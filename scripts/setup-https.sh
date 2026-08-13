@@ -4,7 +4,7 @@ set -euo pipefail
 readonly CADDYFILE="/etc/caddy/Caddyfile"
 readonly INCLUDE_DIR="/etc/caddy/Caddyfile.d"
 readonly SITE_FILE="${INCLUDE_DIR}/mikrotunnel.caddy"
-readonly ACME_ROOT="/var/lib/mikrotunnel/acme-webroot"
+readonly ACME_ROOT="/var/lib/caddy/mikrotunnel-acme"
 readonly TLS_DIR="/etc/mikrotunnel/tls"
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -39,7 +39,8 @@ valid_email "${email}" || { echo "Invalid email." >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y caddy ca-certificates
-install -d -m 0755 "${INCLUDE_DIR}" "${ACME_ROOT}"
+install -d -m 0755 "${INCLUDE_DIR}"
+install -d -m 0755 -o caddy -g caddy "${ACME_ROOT}"
 if ! grep -Fq 'import /etc/caddy/Caddyfile.d/*' "${CADDYFILE}"; then
   cp "${CADDYFILE}" "${CADDYFILE}.mikrotunnel-backup-$(date +%s)"
   printf '\n# MikroTunnel managed sites\nimport /etc/caddy/Caddyfile.d/*\n' >> "${CADDYFILE}"
