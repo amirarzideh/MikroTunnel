@@ -24,6 +24,7 @@ jobs:
           mkdir -p dist/mikrotunnel-linux-${{ matrix.arch }}
           CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -ldflags='-s -w' -o dist/mikrotunnel-linux-${{ matrix.arch }}/mikrotunnel ./cmd/mikrotunnel
           cp deploy/systemd/mikrotunnel.service dist/mikrotunnel-linux-${{ matrix.arch }}/
+          cp scripts/setup-https.sh dist/mikrotunnel-linux-${{ matrix.arch }}/
           tar -C dist/mikrotunnel-linux-${{ matrix.arch }} -czf dist/mikrotunnel-linux-${{ matrix.arch }}.tar.gz .
       - uses: softprops/action-gh-release@v2
         with:

@@ -46,6 +46,8 @@ curl --fail --location --retry 3 "${curl_headers[@]}" --output "${tmp_dir}/relea
 tar -xzf "${tmp_dir}/release.tar.gz" -C "${tmp_dir}"
 install -m 0755 "${tmp_dir}/mikrotunnel" "${INSTALL_DIR}/mikrotunnel"
 ln -sfn "${INSTALL_DIR}/mikrotunnel" "${INSTALL_DIR}/mikrotun"
+install -d -m 0755 /usr/local/lib/mikrotunnel
+install -m 0755 "${tmp_dir}/setup-https.sh" /usr/local/lib/mikrotunnel/setup-https.sh
 
 install -d -m 0750 "${CONFIG_DIR}" "${DATA_DIR}"
 if [[ ! -f "${CONFIG_DIR}/config.yaml" ]]; then
@@ -69,6 +71,10 @@ sleep 1
 systemctl --quiet is-active mikrotunnel.service
 
 echo "MikroTunnel is running on 127.0.0.1:8787."
+echo "To securely publish the dashboard, run: sudo mikrotun setup https"
+if [[ "${MIKROTUNNEL_SETUP_HTTPS:-0}" == "1" ]]; then
+  /usr/local/lib/mikrotunnel/setup-https.sh
+fi
 if [[ -f "${DATA_DIR}/bootstrap-api-key.txt" ]]; then
   echo "API endpoint: http://127.0.0.1:8787/api/v1"
   echo "Bootstrap API key (shown once):"

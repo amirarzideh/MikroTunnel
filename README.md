@@ -50,6 +50,16 @@ sudo mikrotun uninstall --yes --purge  # permanently removes configuration and s
 
 The reconciliation controller repairs missing, down, or drifted owned GRE interfaces. Failed repair attempts are retried automatically with capped exponential backoff (5 seconds to 5 minutes); a clean observation resets the retry counter. `systemd` also restarts the agent if its process exits.
 
+## Secure remote dashboard
+
+The agent always remains bound to loopback. Use a dedicated HTTPS reverse proxy rather than exposing its HTTP port:
+
+```bash
+sudo mikrotun setup https
+```
+
+The wizard offers a domain with an automatically managed Let's Encrypt certificate, or an IP/domain with a PEM certificate and private key you already own. It publishes only Caddy on ports 80/443 and leaves MikroTunnel at `127.0.0.1:8787`.
+
 ## API outline
 
 ```text

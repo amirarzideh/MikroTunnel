@@ -33,6 +33,8 @@ func main() {
 		serve(os.Args[2:])
 	case "service":
 		service(os.Args[2:])
+	case "setup":
+		setup(os.Args[2:])
 	case "uninstall":
 		uninstall(os.Args[2:])
 	case "version":
@@ -43,7 +45,23 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage:\n  mikrotunnel serve --config /etc/mikrotunnel/config.yaml\n  mikrotunnel service <status|start|stop|restart|enable|disable>\n  mikrotunnel uninstall --yes [--purge]\n  mikrotunnel version")
+	fmt.Fprintln(os.Stderr, "usage:\n  mikrotunnel serve --config /etc/mikrotunnel/config.yaml\n  mikrotunnel service <status|start|stop|restart|enable|disable>\n  mikrotunnel setup https\n  mikrotunnel uninstall --yes [--purge]\n  mikrotunnel version")
+}
+
+func setup(args []string) {
+	if len(args) != 1 || args[0] != "https" {
+		usage()
+		return
+	}
+	if os.Geteuid() != 0 {
+		fmt.Fprintln(os.Stderr, "setup must be run as root")
+		os.Exit(1)
+	}
+	cmd := exec.Command("/usr/local/lib/mikrotunnel/setup-https.sh")
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
+	if err := cmd.Run(); err != nil {
+		os.Exit(1)
+	}
 }
 
 func service(args []string) {
