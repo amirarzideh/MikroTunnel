@@ -93,8 +93,25 @@ func removePlatform(_ context.Context, tunnel domain.Tunnel) error {
 
 func create(tunnel domain.Tunnel) (netlink.Link, error) {
 	link := &netlink.Gretun{LinkAttrs: netlink.LinkAttrs{Name: tunnel.Name, MTU: tunnel.MTU, Alias: ownershipMarker(tunnel)}, Local: net.ParseIP(tunnel.Local), Remote: net.ParseIP(tunnel.Remote), Ttl: uint8(tunnel.TTL)}
-	if err := netlink.LinkAdd(link); err != nil && !errors.Is(err, syscall.EEXIST) {
-		return nil, fmt.Errorf("create GRE interface: %w", err)
+	if err := netlink.LinkAdd(link); err != nil {
+		// EEXIST is only recoverable when the requested name itself appeared
+		// concurrently. The kernel also uses EEXIST for conflicts such as a
+		// duplicate GRE local/remote tuple; treating that as success produces a
+		// misleading "Link not found" error below.
+		if !errors.Is(err, syscall.EEXIST) {
+			return nil, fmt.Errorf("create GRE interface: %w", err)
+		}
+		existing, lookupErr := netlink.LinkByName(tunnel.Name)
+		if isLinkNotFound(lookupErr) {
+			return nil, fmt.Errorf("create GRE interface %q: a conflicting GRE interface already exists: %w", tunnel.Name, err)
+		}
+		if lookupErr != nil {
+			return nil, fmt.Errorf("verify existing GRE interface: %w", lookupErr)
+		}
+		if existing.Attrs().Alias != ownershipMarker(tunnel) {
+			return nil, fmt.Errorf("refusing to manage %q because it is not owned by MikroTunnel", tunnel.Name)
+		}
+		return existing, nil
 	}
 	created, err := netlink.LinkByName(tunnel.Name)
 	if err != nil {
