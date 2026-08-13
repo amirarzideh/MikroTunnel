@@ -32,9 +32,11 @@ public_ip="$(curl -4fsS --max-time 8 https://api.ipify.org 2>/dev/null || true)"
 echo "MikroTunnel secure remote access"
 echo "Enter a domain name for standard automatic HTTPS, or keep the public-IP default."
 host="$(read_value 'Public hostname or IP address' "${public_ip}")"
-email="$(read_value 'Email for certificate expiry notices')"
+echo "Email is optional; it is used only for certificate expiry notices."
+email="$(read_value 'Email for certificate expiry notices (optional)' 'skip')"
+[[ "${email}" == "skip" ]] && email=""
 valid_host "${host}" || { echo "Invalid hostname or IP address." >&2; exit 1; }
-valid_email "${email}" || { echo "Invalid email." >&2; exit 1; }
+[[ -z "${email}" ]] || valid_email "${email}" || { echo "Invalid email." >&2; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -54,13 +56,20 @@ common_headers='header {
   }'
 
 if ! is_ipv4 "${host}"; then
-  cat > "${SITE_FILE}" <<EOF
-${host} {
+  tls_config=""
+  if [[ -n "${email}" ]]; then
+    tls_config=$(cat <<EOF
   tls {
     issuer acme {
       email ${email}
     }
   }
+EOF
+)
+  fi
+  cat > "${SITE_FILE}" <<EOF
+${host} {
+${tls_config}
   encode zstd gzip
   ${common_headers}
   reverse_proxy 127.0.0.1:8787
@@ -107,7 +116,13 @@ caddy validate --config "${CADDYFILE}" --adapter caddyfile
 systemctl enable --now caddy
 systemctl restart caddy
 
-certbot certonly --non-interactive --agree-tos --email "${email}" --preferred-profile shortlived --webroot --webroot-path "${ACME_ROOT}" --ip-address "${host}"
+certbot_args=(certonly --non-interactive --agree-tos --preferred-profile shortlived --webroot --webroot-path "${ACME_ROOT}" --ip-address "${host}")
+if [[ -n "${email}" ]]; then
+  certbot_args+=(--email "${email}")
+else
+  certbot_args+=(--register-unsafely-without-email)
+fi
+certbot "${certbot_args[@]}"
 
 install -d -m 0750 -o root -g caddy "${TLS_DIR}"
 cat > /usr/local/lib/mikrotunnel/refresh-ip-certificate.sh <<'EOF'
