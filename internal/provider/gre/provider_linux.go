@@ -18,7 +18,7 @@ func ownershipMarker(tunnel domain.Tunnel) string { return "mikrotunnel:" + tunn
 
 func observePlatform(_ context.Context, tunnel domain.Tunnel) (domain.ActualState, string, error) {
 	link, err := netlink.LinkByName(tunnel.Name)
-	if errors.Is(err, netlink.LinkNotFoundError{}) {
+	if isLinkNotFound(err) {
 		return domain.ActualMissing, "managed GRE interface is absent", nil
 	}
 	if err != nil {
@@ -35,7 +35,7 @@ func observePlatform(_ context.Context, tunnel domain.Tunnel) (domain.ActualStat
 
 func reconcilePlatform(_ context.Context, tunnel domain.Tunnel) error {
 	link, err := netlink.LinkByName(tunnel.Name)
-	if errors.Is(err, netlink.LinkNotFoundError{}) {
+	if isLinkNotFound(err) {
 		if tunnel.DesiredState == domain.DesiredDisabled {
 			return nil
 		}
@@ -76,7 +76,7 @@ func reconcilePlatform(_ context.Context, tunnel domain.Tunnel) error {
 
 func removePlatform(_ context.Context, tunnel domain.Tunnel) error {
 	link, err := netlink.LinkByName(tunnel.Name)
-	if errors.Is(err, netlink.LinkNotFoundError{}) {
+	if isLinkNotFound(err) {
 		return nil
 	}
 	if err != nil {
@@ -135,4 +135,9 @@ func requiresRecreate(link netlink.Link, tunnel domain.Tunnel) bool {
 		return true
 	}
 	return !greLink.Local.Equal(net.ParseIP(tunnel.Local)) || !greLink.Remote.Equal(net.ParseIP(tunnel.Remote)) || greLink.Ttl != uint8(tunnel.TTL)
+}
+
+func isLinkNotFound(err error) bool {
+	var target netlink.LinkNotFoundError
+	return errors.As(err, &target)
 }
