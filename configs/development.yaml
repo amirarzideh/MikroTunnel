@@ -1,0 +1,8 @@
+server:
+  listen_address: 127.0.0.1:8787
+storage:
+  database_path: ./data/mikrotunnel.db
+security:
+  bootstrap_key_file: ./data/bootstrap-api-key.txt
+network:
+  reconcile_interval: 20s

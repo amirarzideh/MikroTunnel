@@ -1,0 +1,4 @@
+/data/
+/dist/
+*.db
+bootstrap-api-key.txt
