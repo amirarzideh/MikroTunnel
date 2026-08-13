@@ -92,6 +92,15 @@ http://${host} {
   }
   redir https://${host}{uri}
 }
+
+https://${host} {
+  tls internal
+  handle /.well-known/acme-challenge/* {
+    root * ${ACME_ROOT}
+    file_server
+  }
+  reverse_proxy 127.0.0.1:8787
+}
 EOF
 caddy validate --config "${CADDYFILE}" --adapter caddyfile
 systemctl enable --now caddy
